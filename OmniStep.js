@@ -19,6 +19,10 @@ function clearDependencyLines() {
     }
 }
 
+/** CSS :root の --accordion-row-duration-in / -out（秒）に合わせる。+25ms でアニメ終了後に再描画 */
+const ACCORDION_ROW_ANIM_IN_MS = Math.round(0.3 * 1000) + 25;
+const ACCORDION_ROW_ANIM_OUT_MS = Math.round(0.35 * 1000) + 25;
+
 const statusList = ["未着手", "調査中", "進行中", "修正中", "完了"];
 
 /** 枠1～6が空欄のときに使う既定名（従来の6カテゴリ） */
@@ -160,10 +164,15 @@ function showThemeOverflowTooltip(text, clientX, clientY) {
 
 /** 親テーマ名が省略されているときだけ全文を表示（ヘルプとは別要素） */
 function onDocumentMouseMoveThemeOverflow(e) {
+    const listView = document.getElementById("listView");
+    if (!listView || listView.style.display === "none" || !listView.contains(e.target)) {
+        hideThemeOverflowTooltip();
+        return;
+    }
     let nameEl = e.target.closest(".theme-name.theme-name-parent");
     if (!nameEl) {
         const under = document.elementFromPoint(e.clientX, e.clientY);
-        if (under) nameEl = under.closest(".theme-name.theme-name-parent");
+        if (under && listView.contains(under)) nameEl = under.closest(".theme-name.theme-name-parent");
     }
     if (!nameEl || !document.body.contains(nameEl)) {
         hideThemeOverflowTooltip();
@@ -1749,6 +1758,7 @@ function switchView(viewName) {
     } else {
         listEl.style.display = 'none';
         timeEl.style.display = 'block';
+        hideThemeOverflowTooltip();
         if (btnT) {
             btnT.classList.add('view-btn-active');
             btnT.classList.remove('view-btn-inactive');
@@ -2232,7 +2242,7 @@ function renderTimeline() {
         });
     }
 
-    const delayMs = hasAnimateIn ? 330 : 0;
+    const delayMs = hasAnimateIn ? ACCORDION_ROW_ANIM_IN_MS : 0;
     const scheduleDrawDependencyLines = () => {
         if (dependencyDrawTimer) clearTimeout(dependencyDrawTimer);
         if (!delayMs) {
@@ -3710,17 +3720,17 @@ function animateListClose(familyKey, done) {
             row.classList.add('row-animate-out');
         }
     });
-    setTimeout(done, 280);
+    setTimeout(done, ACCORDION_ROW_ANIM_OUT_MS);
 }
 
 function animateTimelineClose(familyKey, done) {
-    const rows = Array.from(document.querySelectorAll('.timeline-row-area, .sticky-label'));
+    const rows = Array.from(document.querySelectorAll(".timeline-row-area, .sticky-label"));
     rows.forEach((row) => {
         const fam = row.dataset.family;
-        const isParent = row.dataset.parent === '1';
-        if (fam === familyKey && !isParent) row.classList.add('row-animate-out');
+        const isParent = row.dataset.parent === "1";
+        if (fam === familyKey && !isParent) row.classList.add("row-animate-out");
     });
-    setTimeout(done, 280);
+    setTimeout(done, ACCORDION_ROW_ANIM_OUT_MS);
 }
 
 // ① ＋/－ ボタンの開閉処理
@@ -3767,15 +3777,14 @@ function toggleTimelineAccordion(parentTaskId) {
 
     if (index === -1) {
         animateTimelineClose(familyKey, () => {
-            collapsedThemesTimeline.push(familyKey); // 閉じる
+            collapsedThemesTimeline.push(familyKey);
             renderTimeline();
         });
         return;
-    } else {
-        collapsedThemesTimeline.splice(index, 1); // 開く
-        lastToggledTheme = familyKey; // 展開時のみアニメ対象を記録
     }
-    renderTimeline(); // タイムラインの再描画関数（名称に合わせて変えてください）
+    collapsedThemesTimeline.splice(index, 1);
+    lastToggledTheme = familyKey;
+    renderTimeline();
 }
 
 // ② 子タスクの追加処理
