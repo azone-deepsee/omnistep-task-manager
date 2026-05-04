@@ -1207,6 +1207,10 @@ const TUTORIAL_SECTIONS = [
         title: "12. 別のIDで作成したCSVについて",
         html: "<p>CSVに含まれるOwnerIDが、設定で保存した自分のIDと一致しない場合、アプリはそのデータを<strong>外部CSV</strong>として閲覧専用で表示します。本体の保存データには混ぜず、ロック表示のまま参照できます。不要になったら<strong>外部表示をクリア</strong>で表示だけ消せます。</p>",
     },
+    {
+        title: "13. 保存先について",
+        html: "<p>タスク・マスター・設定（担当者ID・表題・カテゴリ・配色など）は、すべて<strong>お使いのブラウザ内の localStorage（ローカル保存）</strong>に記録されます。<strong>GitHub Pages のサーバーには保存されません</strong>。別のPC・別ブラウザ・シークレットウィンドウでは共有されず、ブラウザのデータ削除やプロファイル削除で<strong>消える可能性</strong>があります。</p><p>大切なデータは<strong>CSV出力</strong>や<strong>テンプレート保存</strong>で定期的にファイルとしてバックアップしてください。GitHub に上がっているのは<strong>アプリのプログラム（HTML/CSS/JS）だけ</strong>で、あなたの業務データ本体は含まれません。</p>",
+    },
 ];
 
 const TUTORIAL_SECTIONS_DOM_VER = "2";
