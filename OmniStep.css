@@ -6,6 +6,9 @@
     --bg-light: #f4f4f4;
     --row-height: 48px; /* 行の高さを統一 */
     --label-width: 280px; /* 左ラベルの幅 */
+    /* リスト／タイムラインの子行アコーディオン（開く＝in / 閉じる＝out を別指定。OmniStep.js の *_MS と揃える） */
+    --accordion-row-duration-in: 0.25s;
+    --accordion-row-duration-out: 0.3s;
 
     /* アプリ全体テーマ（sharp 既定。sepia / cool / soft / dark は html[data-theme] で上書き） */
     --app-page-bg: #eee;
@@ -265,6 +268,43 @@ tbody tr:hover,
 .view-selector .view-btn-inactive {
     background: var(--app-view-inactive-bg) !important;
     color: var(--app-view-inactive-text) !important;
+}
+
+/* タイムライン表示範囲（3/6/9/12か月） */
+.timeline-range-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    margin-left: 10px;
+    border: 1px solid var(--app-border-strong);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--app-surface-2);
+}
+.timeline-range-group .range-btn {
+    border: none;
+    border-radius: 0;
+    padding: 7px 10px;
+    font-size: 0.82rem;
+    background: transparent;
+    color: var(--app-text);
+    cursor: pointer;
+    transition: 0.15s;
+    white-space: nowrap;
+}
+.timeline-range-group .range-btn:hover {
+    filter: brightness(1.03);
+    background: rgba(0, 0, 0, 0.04);
+}
+.timeline-range-group .range-btn.is-active {
+    background: var(--app-view-active-bg);
+    color: #fff;
+    font-weight: 700;
+}
+
+.month-toggle-disabled {
+    opacity: 0.55;
+    cursor: not-allowed !important;
 }
 
 /* 設定モーダル：ライト配色チップ */
@@ -1373,13 +1413,13 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
 
 /* 親タスクから子タスクが「生えてくる」動き */
 .row-animate-in {
-    animation: slideDown 0.3s ease-out forwards;
+    animation: slideDown var(--accordion-row-duration-in) ease-out forwards;
     overflow: hidden;
     transform-origin: top;
 }
 
 .row-animate-out {
-    animation: slideUp 0.3535s ease-in forwards;
+    animation: slideUp var(--accordion-row-duration-out) ease-in forwards;
     overflow: hidden;
     transform-origin: top;
 }

@@ -135,6 +135,14 @@
                 data-help="タスクリスト：表形式でタスクを編集する画面に切り替えます">📋 タスクリスト</button>
             <button class="btn-sub view-btn-inactive" type="button" onclick="switchView('timeline')" id="btnTimeline"
                 data-help="タイムライン：ガント風に期間を俯瞰・ドラッグ編集する画面に切り替えます">📅 タイムライン</button>
+
+            <div class="timeline-range-group" role="group" aria-label="タイムラインの表示範囲"
+                data-help="表示範囲：タイムラインで「今日の月から先」を 3/6/9/12か月に絞ります（範囲外の月は折りたたみ固定）">
+                <button type="button" class="range-btn" data-months="3" onclick="setTimelineMonthRange(3)">3か月</button>
+                <button type="button" class="range-btn" data-months="6" onclick="setTimelineMonthRange(6)">6か月</button>
+                <button type="button" class="range-btn" data-months="9" onclick="setTimelineMonthRange(9)">9か月</button>
+                <button type="button" class="range-btn" data-months="12" onclick="setTimelineMonthRange(12)">12か月</button>
+            </div>
         </div>
 
         <div id="listView">

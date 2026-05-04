@@ -19,6 +19,37 @@ function clearDependencyLines() {
     }
 }
 
+// タイムライン：表示範囲（今日の月から N か月）
+const LS_PBPM_TL_MONTH_RANGE = "pbpm_timeline_month_range";
+let timelineMonthRange = (() => {
+    const n = parseInt(localStorage.getItem(LS_PBPM_TL_MONTH_RANGE) || "12", 10);
+    return [3, 6, 9, 12].includes(n) ? n : 12;
+})();
+let forcedCollapsedMonths = new Set(); // renderTimeline が再計算
+
+function syncTimelineRangeButtons() {
+    const group = document.querySelector(".timeline-range-group");
+    if (!group) return;
+    group.querySelectorAll(".range-btn").forEach((b) => {
+        const m = parseInt(b.getAttribute("data-months") || "", 10);
+        b.classList.toggle("is-active", m === timelineMonthRange);
+    });
+}
+
+function setTimelineMonthRange(months) {
+    const n = Number(months);
+    if (![3, 6, 9, 12].includes(n)) return;
+    timelineMonthRange = n;
+    try {
+        localStorage.setItem(LS_PBPM_TL_MONTH_RANGE, String(n));
+    } catch {
+        /* ignore */
+    }
+    syncTimelineRangeButtons();
+    const timeEl = document.getElementById("timelineView");
+    if (timeEl && timeEl.style.display !== "none") renderTimeline();
+}
+
 /** CSS :root の --accordion-row-duration-in / -out（秒）に合わせる。+25ms でアニメ終了後に再描画 */
 const ACCORDION_ROW_ANIM_IN_MS = Math.round(0.3 * 1000) + 25;
 const ACCORDION_ROW_ANIM_OUT_MS = Math.round(0.35 * 1000) + 25;
@@ -882,6 +913,10 @@ window.onload = () => {
     applyHelpHoverToDocument();
     bindHelpHoverListeners();
     applyPbpmTheme();
+    syncTimelineRangeButtons();
+    // 初期表示はリストなので範囲ボタンは隠す
+    const rangeGroup = document.querySelector('.timeline-range-group');
+    if (rangeGroup) rangeGroup.style.display = 'none';
     ensureDependencyFieldsIfNeeded();
     migrateTaskFieldsIfNeeded();
     migrateTaskCodesIfNeeded();
@@ -1743,10 +1778,12 @@ function switchView(viewName) {
     const timeEl = document.getElementById('timelineView');
     const btnL = document.getElementById('btnList');
     const btnT = document.getElementById('btnTimeline');
+    const rangeGroup = document.querySelector('.timeline-range-group');
 
     if (viewName === 'list') {
         listEl.style.display = 'block';
         timeEl.style.display = 'none';
+        if (rangeGroup) rangeGroup.style.display = 'none';
         if (btnL) {
             btnL.classList.add('view-btn-active');
             btnL.classList.remove('view-btn-inactive');
@@ -1758,6 +1795,7 @@ function switchView(viewName) {
     } else {
         listEl.style.display = 'none';
         timeEl.style.display = 'block';
+        if (rangeGroup) rangeGroup.style.display = 'inline-flex';
         hideThemeOverflowTooltip();
         if (btnT) {
             btnT.classList.add('view-btn-active');
@@ -1774,6 +1812,7 @@ function switchView(viewName) {
 
 // 月の開閉を切り替える関数
 function toggleMonth(mIdx) {
+    if (forcedCollapsedMonths && forcedCollapsedMonths.has(mIdx)) return;
     const index = collapsedMonths.indexOf(mIdx);
     if (index === -1) {
         collapsedMonths.push(mIdx); // 閉じる
@@ -1855,7 +1894,7 @@ function renderTimeline() {
         for (let i = 0; i < monthsCount; i++) {
             const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
             const daysInMonth = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
-            const isCollapsed = collapsedMonths.includes(i);
+            const isCollapsed = forcedCollapsedMonths.has(i) || collapsedMonths.includes(i);
 
             if (d.getMonth() === mDate.getMonth() && d.getFullYear() === mDate.getFullYear()) {
                 return x + (isCollapsed ? 5 : (d.getDate() - 1) * dayWidth);
@@ -1867,11 +1906,24 @@ function renderTimeline() {
 
     const monthsCount = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth()) + 1;
     collapsedMonths = collapsedMonths.filter(i => i >= 0 && i < monthsCount);
+
+    // 今日の月を起点に N か月だけ操作可能にし、それ以外は折りたたみ固定（+グレーアウト）
+    const baseIndex = (() => {
+        const diff = (baseStart.getFullYear() - startDate.getFullYear()) * 12 + (baseStart.getMonth() - startDate.getMonth());
+        return Math.max(0, Math.min(monthsCount - 1, diff));
+    })();
+    const endIndexExclusive = Math.min(monthsCount, baseIndex + timelineMonthRange);
+    forcedCollapsedMonths = new Set();
+    for (let mi = 0; mi < monthsCount; mi++) {
+        if (mi < baseIndex || mi >= endIndexExclusive) forcedCollapsedMonths.add(mi);
+    }
+
     let gridTotalWidth = 0;
     for (let i = 0; i < monthsCount; i++) {
         const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
         const count = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
-        gridTotalWidth += collapsedMonths.includes(i) ? 30 : count * dayWidth;
+        const isCollapsed = forcedCollapsedMonths.has(i) || collapsedMonths.includes(i);
+        gridTotalWidth += isCollapsed ? 30 : count * dayWidth;
     }
 
     // --- 3. ヘッダー行の生成 ---
@@ -1893,11 +1945,12 @@ function renderTimeline() {
     for (let i = 0; i < monthsCount; i++) {
         const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
         const daysInMonth = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
-        const isCollapsed = collapsedMonths.includes(i);
+        const isForced = forcedCollapsedMonths.has(i);
+        const isCollapsed = isForced || collapsedMonths.includes(i);
 
         const mLabel = document.createElement('div');
         mLabel.style.width = isCollapsed ? `30px` : `${daysInMonth * dayWidth}px`;
-        mLabel.style.cursor = 'pointer';
+        mLabel.style.cursor = isForced ? 'not-allowed' : 'pointer';
         mLabel.style.borderRight = '1px dashed #ccc';
         mLabel.style.fontSize = '0.8rem';
         mLabel.style.fontWeight = 'bold';
@@ -1916,11 +1969,20 @@ function renderTimeline() {
             mLabel.style.textAlign = 'left';
             mLabel.innerHTML = `&minus; ${mDate.getMonth() + 1}月`;
         }
-        mLabel.onclick = () => toggleMonth(i);
-        mLabel.setAttribute(
-            "data-help",
-            "月の折りたたみ：クリックでこの月の日付列をまとめて狭くする／広げます"
-        );
+        if (isForced) {
+            mLabel.classList.add("month-toggle-disabled");
+            mLabel.onclick = null;
+            mLabel.setAttribute(
+                "data-help",
+                `月の折りたたみ（制限中）：表示範囲（${timelineMonthRange}か月）外のため固定で折りたたみです`
+            );
+        } else {
+            mLabel.onclick = () => toggleMonth(i);
+            mLabel.setAttribute(
+                "data-help",
+                "月の折りたたみ：クリックでこの月の日付列をまとめて狭くする／広げます"
+            );
+        }
 
         monthHeaderArea.appendChild(mLabel);
     }
@@ -1929,7 +1991,7 @@ function renderTimeline() {
     const timelineSunRects = (() => {
         const rects = [];
         for (let mi = 0; mi < monthsCount; mi++) {
-            if (collapsedMonths.includes(mi)) continue;
+            if (forcedCollapsedMonths.has(mi) || collapsedMonths.includes(mi)) continue;
             const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + mi, 1);
             const daysInMonth = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
             for (let d = 1; d <= daysInMonth; d++) {
