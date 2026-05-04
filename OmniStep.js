@@ -1213,7 +1213,7 @@ const TUTORIAL_SECTIONS = [
     },
 ];
 
-const TUTORIAL_SECTIONS_DOM_VER = "2";
+const TUTORIAL_SECTIONS_DOM_VER = "3";
 
 function ensureTutorialSectionsRendered() {
     const container = document.getElementById("tutorialSections");
