@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PBPM - Task Manager</title>
+    <link rel="stylesheet" href="OmniStep.css">
+    <!-- 許可するライト配色は OmniStep.js の PBPM_LIGHT_THEMES と一致させる -->
+    <script>
+        (function () {
+            var ALLOW_LIGHT = ["sharp", "cool", "sepia", "soft"];
+            try {
+                var dark = localStorage.getItem("pbpm_dark_mode") === "1";
+                var light = localStorage.getItem("pbpm_light_theme") || "sharp";
+                if (ALLOW_LIGHT.indexOf(light) === -1) light = "sharp";
+                document.documentElement.setAttribute("data-theme", dark ? "dark" : light);
+            } catch (e) {
+                try {
+                    var d2 = localStorage.getItem("pbpm_dark_mode") === "1";
+                    document.documentElement.setAttribute("data-theme", d2 ? "dark" : "sharp");
+                } catch (e2) {
+                    document.documentElement.setAttribute("data-theme", "sharp");
+                }
+            }
+        })();
+    </script>
+</head>
+
+<body>
+
+    <div id="newTaskModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>新規親テーマ登録</h3>
+                <span class="modal-close" onclick="closeNewTaskModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>カテゴリ</label>
+                    <select id="newCat"></select>
+                </div>
+                <div class="input-group">
+                    <label>テーマ名 <span style="color:red;">*</span></label>
+                    <input type="text" id="newContent" placeholder="テーマ名を入力してください" oninput="validateNewTask()">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="input-group">
+                        <label>着手日</label>
+                        <input type="date" id="newStartDate" onchange="syncNewModalDates()">
+                    </div>
+                    <div class="input-group">
+                        <label>完了日</label>
+                        <input type="date" id="newDeadline">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="input-group">
+                        <label>展開名</label>
+                        <select id="newFirstFlagName" onchange="syncNewMasterDate('newFirstFlagName', 'newFirstFlagDate')"></select>
+                    </div>
+                    <div class="input-group">
+                        <label>展開日</label>
+                        <input type="date" id="newFirstFlagDate">
+                    </div>
+                    <div class="input-group">
+                        <label>イベント名</label>
+                        <select id="newTargetFlagName" onchange="syncNewMasterDate('newTargetFlagName', 'newTargetFlagDate')"></select>
+                    </div>
+                    <div class="input-group">
+                        <label>イベント日</label>
+                        <input type="date" id="newTargetFlagDate">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>最初の子タスク（任意）</label>
+                    <input type="text" id="newSecondaryStep" placeholder="最初の子タスク内容を入力">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeNewTaskModal()">キャンセル</button>
+                <button id="btnSubmitNewTask" class="btn-add" onclick="submitNewTask()" disabled>登録する</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="external-header">
+        <h1 id="mainTitle" contenteditable="true" onblur="finalizeTitle(this.innerText)">
+            Personal Business Project Manager
+        </h1>
+        <div class="header-right-group" style="display: flex; align-items: center; gap: 15px;">
+            <button class="btn-secondary" onclick="exportTemplate()">テンプレート保存</button>
+            <button class="btn-secondary" onclick="triggerTemplateImport()">テンプレート読込</button>
+            <input type="file" id="templateInput" style="display:none" accept=".csv" onchange="importTemplate(event)">
+            <button class="btn-sub" onclick="openYearlyMaster()">📅 年間日程</button>
+            <div id="todayDate" class="today-date"></div>
+            <button class="theme-toggle-btn" type="button" id="themeToggleBtn" onclick="toggleDarkMode()" title="ダークモード" aria-label="ダークモードの切替">🌙</button>
+            <button class="settings-gear-btn" type="button" onclick="openSettingsModal()" title="設定">⚙</button>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <div class="view-selector">
+            <button class="btn-sub view-btn-active" type="button" onclick="switchView('list')" id="btnList">📋 タスクリスト</button>
+            <button class="btn-sub view-btn-inactive" type="button" onclick="switchView('timeline')" id="btnTimeline">📅 タイムライン</button>
+        </div>
+
+        <div id="listView">
+            <div class="controls-row">
+
+                <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 10px;">
+                    <input type="search" id="searchBox" placeholder="タスク検索..." oninput="filterTasks()"
+                        style="box-sizing: border-box; padding-right: 5px;">
+                </div>
+                <!--<button class="btn-sub btn-sort" onclick="sortTasks()">納期順ソート</button>-->
+                <button class="btn-add" onclick="openNewTaskModal()">＋新規テーマ登録</button>
+                <div class="action-buttons">
+                    <span id="includeArchivedBulkWrap" class="include-archived-wrap" style="display:none;">
+                        <label class="include-archived-label">
+                            <input type="checkbox" id="includeArchivedBulk" onchange="updateDeleteButtonState()">
+                            履歴も含む
+                        </label>
+                    </span>
+                    <span id="selectedCountLabel" style="align-self:center; color:#666; font-size:0.85rem; min-width: 90px; text-align:right;"></span>
+                    <button id="btnExportCsv" class="btn-sub" onclick="exportCSV()" disabled>CSV出力</button>
+                    <button class="btn-sub" onclick="document.getElementById('importFile').click()">CSV取込</button>
+                    <input type="file" id="importFile" accept=".csv" style="display:none;" onchange="importCSV(event)">
+                    <button id="btnArchive" class="btn-archive-disabled" onclick="archiveCompletedTasks()"
+                        disabled>履歴へ移動</button>
+                    <button id="btnDeleteMain" class="btn-danger" onclick="handleDeleteLogic()">全データ削除</button>
+                </div>
+            </div>
+
+            <!--<h3
+                style="margin: 0 0 10px 5px; color: #555; font-size: 1.1rem; border-left: 4px solid #1a73e8; padding-left: 10px;">
+                新規タスク登録
+            </h3>
+
+            <div class="input-row">
+                <select id="inCategory" required>
+                    <option value="" disabled selected>カテゴリ</option>
+                    <option value="日常業務">日常業務</option>
+                    <option value="デジタル化">デジタル化</option>
+                    <option value="生産管理">生産管理</option>
+                    <option value="海外品">海外品</option>
+                    <option value="教育">教育</option>
+                    <option value="その他">その他</option>
+                    <option value="趣味">趣味</option>
+                </select>
+                <input type="text" id="inContent" placeholder="テーマを入力...">
+                <select id="inFactorySelect">
+                    <option value="" disabled selected>展開/場所(◇)を選択</option>
+                </select>
+                <div class="date-field">
+                    <label style="font-size: 0.7rem; color: #666;">目標(☆)</label>
+                    <input type="date" id="inTarget">
+                </div>
+                <div class="date-input-group">
+                    <div class="date-field">
+                        <label>着手</label>
+                        <input type="date" id="inStartDate" onchange="syncInputDates()">
+                    </div>
+                    <div class="date-field">
+                        <label>納期</label>
+                        <input type="date" id="inDeadline">
+                    </div>
+                </div>
+                <button class="btn-add" onclick="addRow()">追加</button>
+            </div>-->
+
+            <div class="tabs">
+            </div>
+
+            <div class="task-list">
+                <table id="taskTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px; text-align: center;">
+                                <input type="checkbox" id="checkAll" onchange="toggleAll(this.checked)"
+                                    style="transform: scale(1.5); cursor: pointer;">
+                            </th>
+                            <th style="width: 100px;">カテゴリ</th>
+                            <th style="width: 300px;">
+                                <div class="sortable-header">
+                                    <span>テーマ/課題</span>
+                                    <button class="sort-btn" onclick="executeSort('theme')" title="名前順で並び替え">▼</button>
+                                </div>
+                            </th>
+                            <th style="width: 150px;">FirstFlag</th>
+                            <th style="width: 150px;">TargetFlag</th>
+                            <th>業務内容</th>
+                            <th style="width: 110px;">
+                                <div class="sortable-header">
+                                    <span>期間</span>
+                                    <button class="sort-btn" onclick="executeSort('date')" title="着手日順で並び替え">▼</button>
+                                </div>
+                            </th>
+                            <th style="width: 90px;">進捗</th>
+                            <th style="width: 50px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="timelineView" style="display:none; margin-top: 20px;">
+            <div id="timelineUnifiedWrapper" class="timeline-unified-wrapper"></div>
+        </div>
+
+        <div class="page-bottom-bar">
+            <span class="page-bottom-spacer"></span>
+            <button id="btnClearExternal" type="button" class="btn-sub" onclick="clearExternalView()" style="display:none;">外部表示をクリア</button>
+        </div>
+
+        <div id="memoModal" class="modal">
+            <div class="modal-content">
+                <h3 style="margin-top:0;">📝 メモ入力</h3>
+                <textarea id="memoText" placeholder="業務の詳細や備忘録を入力してください..."></textarea>
+                <div class="modal-buttons" style="text-align:right; margin-top: auto;">
+                    <button type="button" class="btn-sub" onclick="closeMemo()">閉じる</button>
+                    <button type="button" class="btn-add" onclick="saveMemo()">保存</button>
+                </div>
+            </div>
+        </div>
+        <div id="toast" class="toast"></div>
+    </div>
+
+    <div id="yearlyMasterModal" class="modal">
+        <div class="modal-content master-modal-content">
+            <div class="master-modal-header">
+                <h3 style="margin:0;">年間日程（マスター設定）</h3>
+                <button class="btn-sub" onclick="closeYearlyMaster()" style="padding: 6px 12px;">閉じる</button>
+            </div>
+
+            <div class="master-modal-body">
+                <div class="admin-controls"
+                    style="margin: 15px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <button class="template-btn-sm" onclick="exportMasterCSV()" style="background: #f8f9fa;">CSV出力</button>
+
+                    <label class="template-btn-sm" style="background: #e9ecef; cursor: pointer;">
+                        CSV取込
+                        <input type="file" id="csvUpload" accept=".csv" style="display: none;"
+                            onchange="importMasterCSV(event)">
+                    </label>
+
+                    <button class="template-btn-sm" onclick="resetMasterDates()"
+                        style="color: #856404; border-color: #ffeeba;">
+                        日程のみクリア
+                    </button>
+
+                    <button class="template-btn-sm" onclick="clearMasterAll()"
+                        style="color: #dc3545; border-color: #f5c6cb;">
+                        全件削除
+                    </button>
+                </div>
+
+                <div class="master-add-panel">
+                    <input type="text" id="masterName" placeholder="イベント名（例：棚卸、連休など）" style="flex:2;">
+                    <input type="date" id="masterDate" style="flex:1;">
+                    <button class="btn-add" onclick="addMasterDay()" style="padding: 6px 15px;">追加</button>
+                </div>
+
+                <div class="master-list-panel">
+                    <table class="master-table">
+                        <thead>
+                            <tr>
+                                <th style="text-align: left;">名称</th>
+                                <th style="text-align: left;">日程</th>
+                                <th style="text-align: center; width: 60px;">削除</th>
+                            </tr>
+                        </thead>
+                        <tbody id="yearlyMasterBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="settingsModal" class="modal" style="display:none;">
+        <div class="modal-content" style="width: 560px; max-height: 80vh; overflow-y: auto;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <h3 style="margin:0;">設定</h3>
+                <button class="btn-sub" type="button" onclick="closeSettingsModal()">閉じる</button>
+            </div>
+
+            <div class="settings-theme-block">
+                <div class="settings-theme-label">配色（ライト・4種・春→夏→秋→冬のイメージ）</div>
+                <div class="settings-theme-options" role="radiogroup" aria-label="ライト配色">
+                    <label class="settings-theme-chip"><input type="radio" name="settingsLightTheme" value="sharp" id="settingsThemeSharp"> シャープ</label>
+                    <label class="settings-theme-chip"><input type="radio" name="settingsLightTheme" value="cool" id="settingsThemeCool"> クール</label>
+                    <label class="settings-theme-chip"><input type="radio" name="settingsLightTheme" value="sepia" id="settingsThemeSepia"> セピア</label>
+                    <label class="settings-theme-chip"><input type="radio" name="settingsLightTheme" value="soft" id="settingsThemeSoft"> ソフト</label>
+                </div>
+                <p class="settings-theme-hint">ダークモードは表題右の 🌙 / ☀️ ですぐ切り替えられます。ここで選んだ配色は「保存」後に反映されます（ダーク解除中のみ）。</p>
+            </div>
+
+            <div style="margin-top: 14px; display: grid; gap: 12px;">
+                <div class="input-group">
+                    <label>表題</label>
+                    <input type="text" id="settingsTitle" placeholder="表題">
+                </div>
+                <div class="settings-owner-grid">
+                    <div class="input-group settings-owner-field">
+                        <label for="settingsOwnerId">担当者ID（6桁）</label>
+                        <input type="text" id="settingsOwnerId" placeholder="例：001234" autocomplete="off">
+                    </div>
+                    <div class="input-group settings-owner-field">
+                        <label for="settingsOwner">担当者</label>
+                        <input type="text" id="settingsOwner" placeholder="担当者名" autocomplete="off">
+                    </div>
+                    <p class="settings-owner-hint">数字・英字可。6桁に満たない場合は先頭に0を付けて保存します。</p>
+                </div>
+            </div>
+
+            <div class="settings-category-section">
+                <div class="settings-category-title">カテゴリ（タブ）1～10</div>
+                <p class="settings-category-intro">
+                    枠1～6の名称が空欄のときは、従来の6カテゴリ名が使われます。枠7～10が空欄のときは「カテゴリ7」のような名前になります。
+                    「非表示」にした枠はタブと新規登録の候補に出ません（枠7～10は初期状態で非表示）。既存タスクで使っているカテゴリ名は、一覧のドロップダウンにのみ表示されます。
+                </p>
+                <div id="settingsCategoryRows" style="display: grid; gap: 8px;"></div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top: 16px;">
+                <button class="btn-sub" type="button" onclick="closeSettingsModal()">キャンセル</button>
+                <button class="btn-add" type="button" onclick="saveSettings()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="OmniStep.js"></script>
+
+    <div id="timeline-tooltip" class="tooltip-balloon" style="display: none;"></div>
+    <button id="scrollTopFloatingBtn" class="scroll-top-floating-btn btn-sub" type="button" onclick="scrollToTopSmooth()" style="display:none;">☝ TOPへ</button>
+
+</body>
+
+</html>

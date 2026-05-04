@@ -1,0 +1,17 @@
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# 個人用メモやローカル専用ファイルを載せたくない場合は、下の行の先頭 # を外してください
+# 制作工程.csv

@@ -1,0 +1,1866 @@
+/*基礎的な定義*/
+/*------------------------------------------------------------*/
+:root {
+    --main-black: #333;
+    --border-color: #ccc;
+    --bg-light: #f4f4f4;
+    --row-height: 48px; /* 行の高さを統一 */
+    --label-width: 280px; /* 左ラベルの幅 */
+
+    /* アプリ全体テーマ（sharp 既定。sepia / cool / soft / dark は html[data-theme] で上書き） */
+    --app-page-bg: #eee;
+    --app-text: #333;
+    --app-text-dim: #555;
+    --app-text-muted: #666;
+    --app-surface: #ffffff;
+    --app-surface-2: #f8f9fa;
+    --app-surface-muted: #f4f4f4;
+    --app-surface-label: #fdfdfd;
+    --app-surface-sticky-corner: #eeeeee;
+    --app-border: #dddddd;
+    --app-border-light: #eeeeee;
+    --app-border-strong: #cccccc;
+    --app-container-shadow: rgba(0, 0, 0, 0.1);
+    --app-tab-inactive-bg: #dddddd;
+    --app-tab-inactive-text: #666666;
+    --app-tab-archive-bg: #f8f9fa;
+    --app-row-hover: #f0f7ff;
+    --app-row-base: #ffffff;
+    --app-row-alt: #e4fcda;
+    --app-row-completed-bg: #f5f5f5;
+    --app-row-completed-text: #888888;
+    --app-btn-sub-bg: #e0e0e0;
+    --app-btn-sub-text: #333333;
+    --app-view-active-bg: #1a73e8;
+    --app-view-inactive-bg: #f1f3f4;
+    --app-view-inactive-text: #3c4043;
+    --app-modal-bg: #ffffff;
+    --app-modal-header-bg: #f8f9fa;
+    --app-modal-footer-bg: #f8f9fa;
+    --app-modal-border: #eeeeee;
+    --app-input-bg: #ffffff;
+    --app-timeline-month-collapsed: #eeeeee;
+    --app-timeline-month-open: #ffffff;
+    --app-timeline-grid-line: #f0f0f0;
+    /* タイムライン日曜帯（行エリアに重ねる。月見出し行には使わない） */
+    --app-timeline-sunday-band: rgba(255, 190, 190, 0.14);
+    --app-month-bar-bg: #f1f3f4;
+    --app-memo-modal-bg: #fffef0;
+    --app-gear-bg: #e0e0e0;
+    --app-gear-hover: #d6d6d6;
+    --app-theme-toggle-bg: #e0e0e0;
+    --app-theme-toggle-hover: #d6d6d6;
+    --app-dep-bulk-bg: #f6f6f6;
+    --app-dep-bulk-text: #444444;
+    --app-sort-btn-bg: #f8f9fa;
+    --app-add-child-bg: #e8f0fe;
+    --app-add-child-text: #1967d2;
+    --app-btn-add-bg: #333333;
+    --app-btn-add-color: #ffffff;
+    --app-table-th-bg: #333333;
+    --app-table-th-color: #ffffff;
+    --app-table-td-border: #dddddd;
+}
+
+body {
+    /* 修正案：2位のBIZ UDPゴシックを優先し、無ければ1位を適用する設定 */
+    font-family: "BIZ UDPGothic", "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+    -webkit-font-smoothing: antialiased; /* 文字をより滑らかに描画する魔法の1行 */
+    background-color: var(--app-page-bg);
+    color: var(--app-text);
+    margin: 0; 
+    padding: 10px 20px;
+}
+
+/* モーダル表示中は背面スクロールを止める */
+body.no-scroll {
+    overflow: hidden;
+}
+
+/* 期限切れタスクの強調処理 (I案) */
+/* ------------------------------------------------------------ */
+tr.expired {
+    background-color: #fff0f0 !important;
+}
+tr.expired td {
+    color: #d93025 !important;
+    font-weight: bold;
+}
+/* バーも赤くする（!importantで既存の青を上書き） */
+tr.expired .bar,
+.timeline-row.expired .bar {
+    background-color: #ff5252 !important;
+    opacity: 0.9;
+    box-shadow: 0 0 5px rgba(255, 82, 82, 0.5) !important;
+}
+
+/* 2行目：ホバー時の視覚効果（リストとタイムラインを同期） */
+/* ------------------------------------------------------------ */
+tbody tr:hover,
+.timeline-row:hover {
+    background-color: var(--app-row-hover) !important;
+}
+.bar:hover {
+    filter: brightness(1.1) !important;
+    transform: scaleY(1.1);
+    z-index: 100;
+}
+
+/* レイアウト：メインコンテナ */
+/* ------------------------------------------------------------ */
+
+.container {
+    width: 95%;        /* 画面端に寄りすぎないよう95%程度がおすすめ */
+    max-width: 1600px; /* あまりに広すぎると見づらいので、最大幅を少し伸ばす */
+    margin: 0 auto;
+    background: var(--app-surface);
+    padding: 20px;
+    box-shadow: 0 2px 10px var(--app-container-shadow);
+    min-height: 80vh;
+}
+
+.page-bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 10px;
+    border-top: 1px solid var(--app-border-light);
+}
+.page-bottom-spacer {
+    flex: 1;
+}
+
+.external-lock {
+    display: inline-block;
+    margin-right: 4px;
+    font-size: 0.85rem;
+    line-height: 1;
+    user-select: none;
+}
+.theme-cell.external-task-row .theme-name {
+    opacity: 0.95;
+}
+
+/*固定部分の処理*/
+/*------------------------------------------------------------*/
+/* レイアウト：ヘッダー・タブ */
+/* ------------------------------------------------------------ */
+.header {
+    padding: 10px;
+    background: var(--app-surface);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.tabs {
+    display: flex;
+    gap: 5px;
+    padding: 0;
+    background: var(--app-surface-2);
+    border-bottom: 1px solid var(--app-border);
+    box-sizing: border-box;
+}
+
+.tab {
+    padding: 5px 15px;
+    cursor: pointer;
+    background: var(--app-btn-sub-bg);
+    border-radius: 4px 4px 0 0;
+    font-size: 0.9rem;
+}
+
+.tab.active {
+    background: var(--app-view-active-bg);
+    color: #fff;
+    font-weight: bold;
+}
+
+/* ヘッダー周り */
+.external-header {
+    max-width: 1400px;
+    margin: 0 auto 10px auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+.external-header h1 { margin: 0; font-size: 1.6rem; color: var(--app-text); }
+.today-date { font-weight: bold; color: var(--app-text-dim); font-size: 1rem; }
+
+/* ダーク切替（ギアと同サイズ） */
+.theme-toggle-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: var(--app-theme-toggle-bg);
+    color: var(--app-text);
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 26px;
+    padding: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+.theme-toggle-btn:hover {
+    background: var(--app-theme-toggle-hover);
+}
+
+/* ヘルプ（ホバー説明のON/OFF） */
+.help-hover-toggle {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px dashed var(--app-border-strong);
+    background: var(--app-theme-toggle-bg);
+    color: var(--app-text);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 24px;
+    padding: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+.help-hover-toggle:hover {
+    background: var(--app-theme-toggle-hover);
+}
+.help-hover-toggle.help-hover-toggle--active {
+    border-style: solid;
+    border-color: var(--app-view-active-bg);
+    color: var(--app-view-active-bg);
+    background: var(--app-row-hover);
+}
+
+/* 設定（ギア）ボタン */
+.settings-gear-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: var(--app-gear-bg);
+    color: var(--app-text);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 26px;
+    padding: 0;
+}
+.settings-gear-btn:hover {
+    background: var(--app-gear-hover);
+}
+
+/* リスト / タイムライン切替 */
+.view-selector {
+    margin: 10px 0;
+    display: flex;
+    gap: 10px;
+    border-bottom: 2px solid var(--app-border-light);
+    padding-bottom: 10px;
+}
+.view-selector .view-btn-active {
+    background: var(--app-view-active-bg) !important;
+    color: #fff !important;
+}
+.view-selector .view-btn-inactive {
+    background: var(--app-view-inactive-bg) !important;
+    color: var(--app-view-inactive-text) !important;
+}
+
+/* 設定モーダル：ライト配色チップ */
+.settings-theme-block {
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 6px;
+    background: var(--app-surface-2);
+    border: 1px solid var(--app-border);
+}
+.settings-theme-label {
+    font-weight: bold;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+    color: var(--app-text);
+}
+.settings-theme-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+.settings-theme-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--app-border);
+    background: var(--app-surface);
+    color: var(--app-text);
+    cursor: pointer;
+    user-select: none;
+}
+.settings-theme-chip input {
+    margin: 0;
+    cursor: pointer;
+}
+.settings-theme-hint {
+    font-size: 0.72rem;
+    color: var(--app-text-muted);
+    margin: 10px 0 0 0;
+    line-height: 1.45;
+}
+
+/* 設定モーダル：担当者ID（1/3）＋担当者名（2/3） */
+.settings-owner-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 12px;
+    align-items: start;
+}
+.settings-owner-grid .settings-owner-field {
+    margin: 0;
+    min-width: 0;
+}
+.settings-owner-grid .settings-owner-field label {
+    display: block;
+    font-size: 0.9rem;
+    margin-bottom: 5px;
+    color: var(--app-text-muted);
+    min-height: 2.6em;
+    line-height: 1.25;
+    box-sizing: border-box;
+}
+.settings-owner-grid .settings-owner-field input[type="text"] {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 1px solid var(--app-border);
+    border-radius: 4px;
+    background: var(--app-input-bg);
+    color: var(--app-text);
+    font-size: 0.9rem;
+}
+.settings-owner-hint {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: 0;
+    font-size: 0.72rem;
+    color: var(--app-text-muted);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow-x: auto;
+}
+
+.settings-category-section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--app-border-light);
+}
+.settings-category-title {
+    font-weight: bold;
+    margin-bottom: 6px;
+    color: var(--app-text);
+}
+.settings-category-intro {
+    font-size: 0.72rem;
+    color: var(--app-text-muted);
+    margin: 0 0 10px 0;
+    line-height: 1.45;
+}
+
+/* ボタン・コントロール */
+.controls-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 15px;
+    align-items: center;
+}
+
+/* レイアウト：タスクリスト（左側） */
+/* ------------------------------------------------------------ */
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.task-list-container {
+    width: var(--label-width);
+    overflow-y: auto;
+    border-right: 1px solid var(--border-color);
+    background: var(--app-surface);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+/* 固定TOPボタンと最下段が被らない余白 */
+#listView {
+    padding-bottom: 90px;
+}
+
+th, td {
+    border: 1px solid var(--app-border-light);
+    padding: 8px;
+    font-size: 0.85rem;
+    height: var(--row-height);
+    box-sizing: border-box;
+}
+
+th {
+    background: var(--app-surface-muted);
+    color: var(--app-text);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/*----------------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------------------*/
+.search-container { position: relative; flex: 0 0 300px; }
+#searchBox {
+    width: 100%; padding: 8px 35px 8px 15px;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    background: var(--app-input-bg);
+    color: var(--app-text);
+}
+#searchBox::placeholder {
+    color: var(--app-text-muted);
+    opacity: 0.85;
+}
+
+.action-buttons { flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+
+.include-archived-wrap {
+    align-self: center;
+    margin-right: 4px;
+}
+.include-archived-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.82rem;
+    color: var(--app-text-dim);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+.include-archived-label input {
+    transform: scale(1.15);
+    cursor: pointer;
+}
+
+button { border: none; border-radius: 3px; padding: 8px 15px; cursor: pointer; font-size: 0.85rem; transition: 0.2s; }
+.btn-add { background: var(--app-btn-add-bg); color: var(--app-btn-add-color); }
+.btn-sub { background: var(--app-btn-sub-bg); color: var(--app-btn-sub-text); }
+.btn-secondary { background: var(--app-btn-sub-bg); color: var(--app-btn-sub-text); border: 1px solid var(--app-border-strong); }
+.btn-danger { background: #fce8e6; color: #d93025; }
+.btn-danger-active { background: #d93025 !important; color: white !important; }
+
+button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* スクロールTOPへボタン（左下追従） */
+.scroll-top-floating-btn {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 18px;
+    z-index: 9999;
+    padding: 8px 12px;
+    border-radius: 999px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+#inContent { flex: 1.5; }
+.input-row input, .input-row select { padding: 8px; border: 1px solid var(--border-color); border-radius: 3px; flex: 1; font-size: 0.85rem; }
+
+/* リスト・タブ */
+/* flexコンテナの中で特定の要素を右に飛ばす */
+.tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 0;
+    width: 100%; /* 横幅いっぱいに広げる */
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.tab-archive {
+    margin-left: auto; /* 左側に自動で余白を作り、右へ寄せる */
+    border-left: 1px solid var(--border-color); /* 独立感を出すために線を引く */
+    background-color: var(--app-tab-archive-bg); /* 履歴と分かりやすく少し色を変える */
+}
+.tab {
+    padding: 8px 16px; cursor: pointer; background: var(--app-tab-inactive-bg); color: var(--app-tab-inactive-text);
+    border: 1px solid var(--border-color); border-bottom: none; border-radius: 4px 4px 0 0;
+}
+.tab.active { background: var(--app-table-th-bg); color: var(--app-table-th-color); }
+
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+th { background: var(--app-table-th-bg); color: var(--app-table-th-color); padding: 10px; font-size: 0.8rem; }
+td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; }
+
+.cat-select {
+    color: var(--app-text);
+    background-color: transparent;
+}
+
+/* ステータスボタンの配色 */
+/* ------------------------------------------------------------ */
+/* 進捗ボタン */
+.status-btn {
+    color: #ffffff; /* 文字は白 */
+    width: 65px;          /* 幅を固定（全ての文字が収まるサイズ） */
+    text-align: center;   /* 文字を中央に */
+    display: inline-block;
+    box-sizing: border-box;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    padding: 4px 8px;
+    border-radius: 4px;
+    line-height: 1.2;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.8rem;
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+}
+
+/* tdの中で中央に配置するためのクラス */
+.td-status {
+    text-align: center;   /* 左右中央 */
+    vertical-align: middle; /* 上下中央 */
+}
+
+/* 各ステータスの明るい配色 */
+.status-未着手 { background-color: #9e9e9e; } /* グレー */
+.status-調査中 { background-color: #00bcd4; } /* シアン/水色 */
+.status-進行中 { background-color: #2196f3; } /* ブルー */
+.status-修正中 { background-color: #ff9800; } /* オレンジ */
+.status-完了   { background-color: #4caf50; } /* グリーン */
+/* --- タイムライン構造 (重要修正箇所) --- */
+
+/* レイアウト：タイムライン（右側） */
+/* ------------------------------------------------------------ */
+.month-col {
+    border-right: 1px solid var(--app-border);
+    border-bottom: 1px solid var(--app-border);
+    text-align: center;
+    background: var(--app-surface-muted);
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    font-weight: bold;
+    height: 35px;
+    line-height: 35px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.month-col:hover {
+    background: var(--app-btn-sub-bg);
+}
+
+.timeline-body {
+    position: relative;
+}
+
+.timeline-row {
+    display: flex;
+    height: var(--row-height);
+    border-bottom: 1px solid var(--app-border-light);
+    position: relative;
+    box-sizing: border-box;
+}
+
+.day-cell {
+    flex-shrink: 0;
+    border-right: 1px solid var(--app-border-light);
+    height: 100%;
+    box-sizing: border-box;
+}
+.timeline-container {
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    overflow: hidden; /* コンテナ自体はスクロールさせない */
+}
+
+.timeline-header {
+    display: flex;
+    position: sticky;
+    top: 0;
+    /* 他のあらゆる要素（バーや線）より上にくるように設定 */
+    z-index: 100 !important; 
+    background-color: var(--app-surface-muted) !important; /* 背景色で下の要素を物理的に隠す */
+    border-bottom: 1px solid var(--app-border-strong);
+}
+
+.timeline-wrapper {
+    display: flex;
+    /* 画面の高さの約60%〜70%に制限（ヘッダー等の分を引く） */
+    height: 65vh; 
+    border-bottom: 1px solid var(--app-border-strong);
+}
+
+/* タイムライン全体のコンテナ */
+.timeline-wrapper {
+    display: grid;
+    /* 1列目（業務内容）は固定、2列目以降は日付（例：30pxずつ） */
+    grid-template-columns: var(--label-width) repeat(auto-fill, 30px);
+    overflow: auto; /* 縦横のスクロールをここ一箇所に集約 */
+    max-height: 600px; /* 画面に合わせた高さ */
+    border: 1px solid var(--app-border);
+    position: relative;
+}
+
+/* 2. .timeline-label-cell と .timeline-label-row を消して、これに置き換え */
+.timeline-label-cell {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    
+    width: var(--label-width);
+    min-width: var(--label-width);
+    height: var(--row-height);
+    
+    background: var(--app-surface-label);
+    border-right: 2px solid var(--app-border);
+    border-bottom: 1px solid var(--app-border-light);
+    padding: 0 10px;
+    
+    display: flex;
+    align-items: center; /* 上下中央 */
+    box-sizing: border-box;
+}
+
+/* 3. 新しく追加：2行表示を実現するための設定 */
+.label-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;    /* 最大2行まで */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;  /* 3行目以降は「...」 */
+    
+    font-size: 0.85rem;
+    line-height: 1.25;
+    white-space: normal;      /* 改行を許可 */
+    word-break: break-all;    /* 長い単語も強制改行 */
+    width: 100%;              /* 幅いっぱい使う */
+    color: var(--app-text);
+}
+
+/* 4. 右側のチャート行の高さも連動させる */
+.timeline-row-area {
+    position: relative;
+    border-bottom: 1px dashed var(--app-border-light);
+    height: var(--row-height); /* 変数を使うように変更 */
+    background: var(--app-surface);
+    box-sizing: border-box;
+}
+
+
+/* 日付グリッドのセル */
+.timeline-grid-cell {
+    border-right: 1px solid var(--app-border-light);
+    border-bottom: 1px solid var(--app-border-light);
+    height: 35px;
+    position: relative;
+}
+
+/* 月ヘッダー：スクロールしても上部に固定 */
+.timeline-month-bar {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    height: 30px;
+    background: var(--app-month-bar-bg);
+    border-bottom: 1px solid var(--app-border-strong);
+}
+
+.timeline-month-label {
+    flex-shrink: 0;
+    border-right: 1px solid var(--app-border-strong);
+    text-align: center;
+    font-size: 0.75rem;
+    line-height: 30px;
+    font-weight: bold;
+    background: var(--app-month-bar-bg);
+    color: var(--app-text);
+}
+
+/* グリッド本体 */
+.timeline-grid {
+    position: relative;
+    background-image: linear-gradient(90deg, var(--app-timeline-grid-line) 1px, transparent 1px);
+    background-size: 15px 100%; /* 1日 15px */
+    min-height: 100%;
+}
+
+/* バーが表示される各行 */
+.timeline-grid-row {
+    height: var(--row-height);
+    border-bottom: 1px solid var(--app-border-light);
+    position: relative;
+    width: 100%;
+}
+
+/* タイムライン：バーの装飾 */
+/* ------------------------------------------------------------ */
+
+.bar:hover {
+    transform: scaleY(1.1);
+    opacity: 1;
+}
+
+.timeline-task-bar {
+    position: absolute;
+    top: calc((var(--row-height) - 28.8px) / 2); /* 24px の約120%を行内で中央寄せ */
+    height: 28.8px;
+    line-height: 28.8px;
+    color: #fff;
+    font-size: 0.7rem;
+    padding: 0 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 5;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* タイムライン：日曜の縦帯（統合ビュー・各行のチャートエリア内） */
+.timeline-sunday-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* タイムライン：土日・今日の着色 */
+/* ------------------------------------------------------------ */
+.sun { background-color: #ffebee; }
+.sat { background-color: #e3f2fd; }
+.timeline-today-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(234, 67, 53, 0.6);
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* カテゴリ別カラー */
+.bar-日常業務 { background: #4285f4; }
+.bar-イベント { background: #34a853; }
+.bar-デジタル化 { background: #fbbc05; }
+.bar-生産管理 { background: #ea4335; }
+.bar-教育 { background: #a142f4; }
+.bar-その他 { background: #9e9e9e; }
+.bar-海外品 { background: #ff7043; }
+.bar-趣味 { background: #26c6da; }
+
+/* モーダル等 */
+.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+.modal-content { background: var(--app-modal-bg); color: var(--app-text); padding: 20px; border-radius: 5px; width: 600px; }
+
+/* チュートリアル（設定の💡・初回未設定時の手引き） */
+.tutorial-modal {
+    z-index: 1100;
+}
+.tutorial-modal-content {
+    width: min(720px, 92vw);
+    max-height: min(82vh, 760px);
+    display: flex;
+    flex-direction: column;
+    padding: 18px 20px;
+    box-sizing: border-box;
+    border: 1px solid var(--app-border-strong);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.tutorial-modal--welcome .tutorial-modal-content {
+    width: min(920px, 94vw);
+    max-height: min(88vh, 900px);
+}
+.tutorial-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--app-border-light);
+}
+.tutorial-body-scroll {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 6px;
+}
+.tutorial-intro {
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: var(--app-surface-2, rgba(0, 0, 0, 0.04));
+    border: 1px solid var(--app-border-light);
+}
+.tutorial-intro-title {
+    margin: 0 0 10px 0;
+    font-size: 1.05rem;
+}
+.tutorial-intro p {
+    margin: 0 0 10px 0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+.tutorial-intro p:last-child {
+    margin-bottom: 0;
+}
+.tutorial-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.tutorial-section {
+    border: 1px solid var(--app-border-light);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--app-surface, transparent);
+}
+.tutorial-section-panel-shell {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.35s ease;
+    overflow: hidden;
+}
+.tutorial-section.is-open .tutorial-section-panel-shell {
+    grid-template-rows: 1fr;
+}
+.tutorial-section-toggle {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    margin: 0;
+    border: none;
+    background: var(--app-surface-2, rgba(0, 0, 0, 0.03));
+    color: var(--app-text);
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1.4;
+}
+.tutorial-section-toggle:hover {
+    filter: brightness(1.04);
+}
+.tutorial-section-chevron {
+    flex-shrink: 0;
+    width: 1.2em;
+    font-weight: bold;
+    opacity: 0.85;
+}
+.tutorial-section-heading {
+    flex: 1;
+}
+.tutorial-section-panel {
+    min-height: 0;
+    overflow: hidden;
+    border-top: 1px solid var(--app-border-light);
+    background: var(--app-modal-bg);
+}
+.tutorial-section-panel-inner {
+    padding: 10px 14px 14px 38px;
+    font-size: 0.88rem;
+    line-height: 1.55;
+}
+.tutorial-section-panel-inner p {
+    margin: 0 0 8px 0;
+}
+.tutorial-section-panel-inner p:last-child {
+    margin-bottom: 0;
+}
+.tutorial-lamp-btn {
+    width: 2.5rem;
+    height: 2.5rem;
+    min-width: 2.5rem;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.12rem;
+    line-height: 1;
+    box-sizing: border-box;
+}
+
+
+/* テンプレートボタンのスタイル */
+.template-btn {
+    display: inline-block;
+    padding: 3px 8px;
+    font-size: 0.75rem;
+    margin: 5px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    color: #007bff;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.template-btn:hover {
+    background-color: #007bff;
+    color: #ffffff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+
+/* 新しい状態：IDを統一し、付箋らしいサイズに固定 */
+#memoModal .modal-content {
+    background: var(--app-memo-modal-bg);
+    width: 400px;
+    max-height: 80vh; /* 画面の高さの80%までに制限 */
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    border: 1px solid var(--app-border-strong);
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.3);
+}
+
+#memoText {
+    width: 100%;
+    height: 250px; /* テキストエリアの高さを固定 */
+    margin-top: 10px;
+    margin-bottom: 15px;
+    border: 1px solid var(--app-border-strong);
+    background: var(--app-input-bg);
+    color: var(--app-text);
+    padding: 10px;
+    box-sizing: border-box;
+    resize: none; /* 勝手に伸びないように固定 */
+}
+
+/* タイムライン上の目標日（☆）のスタイル */
+.timeline-target-mark {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%); /* 行の上下中央に配置 */
+    font-size: 1.2rem;
+    color: #ff9800; /* オレンジ色（金星のようなイメージ） */
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+    z-index: 15; /* タスクバーより上に表示 */
+    pointer-events: none; /* クリック操作を邪魔しない */
+    line-height: 1;
+}
+
+/* トーストの見た目とアニメーション */
+/* ------------------------------------------------------------ */
+#toast-container {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+}
+.toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 5px;
+    z-index: 2000;
+    opacity: 0;
+    transition: opacity 0.3s, bottom 0.3s;
+    pointer-events: none;
+}
+.toast.show {
+    opacity: 1;
+    bottom: 40px; /* 少し上に浮き上がる */
+}
+
+
+/* 統合されたタイムラインの外枠 */
+.timeline-unified-wrapper {
+    display: grid;
+    /* 1列目：業務内容(固定幅)、2列目：タイムライン本体 */
+    grid-template-columns: var(--label-width) 1fr; 
+    overflow: auto;
+    max-height: 70vh;
+    border: 1px solid var(--app-border);
+    position: relative;
+}
+
+/* 左側に固定されるラベルセル */
+.sticky-label {
+    position: sticky;
+    left: 0;
+    background: var(--app-surface-label);
+    z-index: 60; /* バーより上（ヘッダーよりは下） */
+    border-right: 2px solid var(--app-border);
+    border-bottom: 1px solid var(--app-border-light);
+    color: var(--app-text);
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    font-size: 0.85rem;
+    width: 280px !important;
+    min-width: 280px !important;
+    height: var(--row-height) !important;
+    box-sizing: border-box;
+    overflow: hidden; /* はみ出し防止 */
+}
+
+/* 上部に固定されるヘッダーエリア */
+.sticky-header {
+    position: sticky;
+    top: 0;
+    /* 月ヘッダーは縦方向だけ固定（横方向はスクロールに追従させる） */
+    left: unset;
+    z-index: 90;
+    background: var(--app-surface-2);
+    height:/* 48px;*/var(--row-height) !important;
+    line-height:/* 48px;*/var(--row-height) !important;
+}
+
+/* 3. 左上の角（「テーマ/課題」と書いてある一番左上のセル） */
+/* ここが最前面にこないと、月ヘッダーが上に被さってしまいます */
+.sticky-label.sticky-header {
+    z-index: 200 !important; /* 絶対に最前面にする */
+    background: var(--app-surface-sticky-corner); /* 角っこだと分かりやすい色に */
+    left: 0;
+    top: 0;
+}
+
+/* タイムラインのバーが描画されるエリア */
+.timeline-row-area {
+    position: relative;
+    border-bottom: 1px dashed var(--app-border-light);
+    height: var(--row-height) !important;
+    /*height: 35px; /* ここを固定すればズレはゼロになります */
+    background: var(--app-surface);
+}
+
+
+/* 完了行全体の背景と文字色を薄くする */
+.row-completed {
+    background-color: var(--app-row-completed-bg) !important; /* 薄いグレー */
+    color: var(--app-row-completed-text) !important;              /* 文字を薄く */
+}
+
+/* 完了行の中にある入力欄やセレクトボックスも薄くする */
+.row-completed input, 
+.row-completed select, 
+.row-completed td {
+    color: var(--app-row-completed-text) !important;
+    opacity: 0.7; /* 少し透けさせる */
+}
+
+/* アニメーション・アコーディオン */
+/* ------------------------------------------------------------ */
+/* これがないと ⊕ がボタンに見えません */
+.accordion-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #1a73e8; /* 青色 */
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    margin-right: 5px;
+    font-weight: bold;
+    user-select: none; /* テキスト選択防止 */
+}
+
+.accordion-btn:hover {
+    background: #1557b0; /* ホバーで少し暗く */
+}
+
+.accordion-btn.accordion-btn-disabled {
+    background: #b3d9ff;
+    cursor: not-allowed;
+    pointer-events: none;
+    opacity: 0.85;
+}
+
+/* タスクリスト：業務内容セル（右端に依存フラグ） */
+.issue-cell-inner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.issue-text {
+    flex: 1;
+    min-width: 0;
+    word-break: break-all;
+}
+
+.dep-flag-input {
+    flex: 0 0 auto;
+    cursor: pointer;
+    transform: scale(1.1);
+}
+
+/* 親タスク：連携一括ボタン */
+.dep-bulk-btn {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    font-size: 0.72rem;
+    border: 1px solid var(--app-border-strong);
+    background: var(--app-dep-bulk-bg);
+    color: var(--app-dep-bulk-text);
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 92px; /* ON/OFFで幅が変わらないよう固定 */
+    text-align: center;
+}
+.dep-bulk-btn:hover {
+    background: var(--app-border-light);
+}
+.dep-bulk-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* タスクリスト：メモ/削除アイコン幅固定 */
+.memo-action-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+}
+
+.memo-action-icon {
+    width: 22px;
+    display: inline-block;
+    text-align: center;
+}
+
+/* 子タスク並び替え（▲▼） */
+.theme-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.theme-cell-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.theme-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.theme-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
+    color: var(--app-text);
+}
+
+.theme-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 0.72rem;
+    color: var(--app-text-muted);
+    line-height: 1.1;
+}
+
+.theme-code {
+    color: var(--app-text-dim);
+}
+
+.theme-progress {
+    color: var(--app-text-muted);
+}
+
+.parent-issue-controls {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+}
+
+.order-controls {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    margin-left: auto;
+    user-select: none;
+}
+
+.order-controls-disabled {
+    opacity: 0.65;
+}
+
+.order-btn {
+    cursor: pointer;
+    color: var(--app-text-muted);
+    font-size: 12px;
+    line-height: 12px;
+    padding: 1px 2px;
+}
+
+.order-btn:hover {
+    color: var(--app-text);
+}
+
+.order-btn-disabled {
+    cursor: not-allowed;
+    color: #c0c0c0;
+    pointer-events: none;
+}
+
+/* テーマの区切り線を太くする */
+/* 親タスクの行の上に太線を引く */
+.parent-row {
+    border-top: 2.5px solid var(--app-text-dim) !important; /* 少し濃いめの線 */
+}
+
+/* 子タスクのチェックボックスが入る場所の微調整 */
+.child-checkbox-spacer {
+    display: inline-block;
+    width: 20px;
+}
+
+/* マスター設定用：小さいボタンのスタイル */
+.template-btn-sm {
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    border: 1px solid var(--app-border-strong);
+    border-radius: 4px;
+    background: var(--app-surface);
+    color: var(--app-text);
+    cursor: pointer;
+    transition: 0.2s;
+}
+.template-btn-sm:hover {
+    background: var(--app-surface-muted);
+}
+
+/* 年間日程（マスター）モーダル：ヘッダー固定・中身スクロール */
+.master-modal-content {
+    width: 700px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.master-modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--app-surface);
+    color: var(--app-text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 10px 0 10px;
+    border-bottom: 1px solid var(--app-border-light);
+}
+
+.master-modal-body {
+    padding: 10px;
+    overflow-y: auto;
+}
+
+.master-add-panel {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    padding: 12px;
+    background: var(--app-surface-2);
+    border-radius: 6px;
+}
+
+.master-add-panel input {
+    padding: 6px;
+    border: 1px solid var(--app-border-strong);
+    border-radius: 4px;
+    background: var(--app-input-bg);
+    color: var(--app-text);
+}
+
+/* リスト内側の枠を消す（外枠だけで十分） */
+.master-list-panel {
+    max-height: 320px;
+    overflow-y: auto;
+    border: none;
+    border-radius: 0;
+}
+
+.master-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.master-table thead tr {
+    background: var(--app-surface-muted);
+    color: var(--app-text);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.master-table th {
+    padding: 10px;
+    border-bottom: 2px solid var(--app-border);
+}
+
+.master-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--app-border-light);
+    color: var(--app-text);
+}
+
+/* 「リストの中にさらに枠」感の原因（input枠）を消す */
+#yearlyMasterBody input[type="text"],
+#yearlyMasterBody input[type="date"] {
+    border: none;
+    background: transparent;
+    padding: 4px 6px;
+    width: 95%;
+    box-sizing: border-box;
+}
+
+/* マスター用テーブルのセル調整 */
+#yearlyMasterBody td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+    color: #444;
+}
+
+
+/* ⑤ ぬるっと動かすためのアニメーション定義 */
+
+/* 親タスクから子タスクが「生えてくる」動き */
+.row-animate-in {
+    animation: slideDown 0.3s ease-out forwards;
+    overflow: hidden;
+    transform-origin: top;
+}
+
+.row-animate-out {
+    animation: slideUp 0.3535s ease-in forwards;
+    overflow: hidden;
+    transform-origin: top;
+}
+
+@keyframes slideDown {
+    0% {
+        opacity: 0;
+        transform: scaleY(0);
+        max-height: 0;
+    }
+    100% {
+        opacity: 1;
+        transform: scaleY(1);
+        max-height: var(--row-height);
+    }
+}
+
+@keyframes slideUp {
+    0% {
+        opacity: 1;
+        transform: scaleY(1);
+        max-height: var(--row-height);
+    }
+    100% {
+        opacity: 0;
+        transform: scaleY(0);
+        max-height: 0;
+    }
+}
+
+/* タイムラインのバー部分も一緒にふわっと出す */
+.bar-animate-in {
+    animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ソートボタンのスタイル */
+/* ------------------------------------------------------------ */
+.sort-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #888;
+    padding: 0 5px;
+    vertical-align: middle;
+    transition: color 0.2s;
+}
+.sort-btn:hover {
+    color: var(--main-black);
+}
+.sort-btn.active {
+    color: #007bff;
+    font-weight: bold;
+}
+
+/* ヘッダー内のテキストとボタンを横並びにする */
+.sortable-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* テキストとボタンを両端に寄せる */
+    width: 100%;
+}
+
+/* ソートボタンの見た目 */
+.sort-btn {
+    background: var(--app-btn-sub-bg);
+    border: 1px solid var(--app-border-strong);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 2px 5px;
+    margin-left: 5px;
+    transition: background 0.2s;
+    line-height: 1;
+    color: var(--app-text-muted);
+}
+
+.sort-btn:hover {
+    background: var(--app-border-strong);
+    color: var(--app-text);
+}
+
+/* 3行目：吹き出し（ツールチップ）の装飾 */
+/* ------------------------------------------------------------ */
+.tooltip-balloon {
+    position: fixed;
+    z-index: 3000;
+    background: rgba(51, 51, 51, 0.95);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    pointer-events: none;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    white-space: nowrap;
+}
+.tooltip-balloon strong { color: #ffeb3b; } /* 吹き出し内のタイトルを黄色に */
+
+.tooltip-balloon::after {
+    content: "";
+    position: absolute;
+    top: 100%; left: 20px;
+    border: 6px solid transparent;
+    border-top-color: rgba(51, 51, 51, 0.95);
+}
+
+/* ヘルプON時：data-help をホバーで表示（タイムライン用ツールチップより手前） */
+.help-hover-tooltip {
+    position: fixed;
+    z-index: 100021;
+    max-width: min(640px, 96vw);
+    min-width: 12rem;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--app-text);
+    background: var(--app-modal-bg);
+    border: 1px solid var(--app-border-strong);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px var(--app-container-shadow);
+    pointer-events: none;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.timeline-resize-handle:hover {
+    background: rgba(255, 255, 255, 0.55) !important;
+}
+
+
+/* モーダル（新規登録・メモなど） */
+/* ------------------------------------------------------------ */
+/* モーダル基本スタイル */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2000;
+}
+.modal-overlay .modal-content {
+    background: var(--app-modal-bg);
+    color: var(--app-text);
+    width: 400px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px var(--app-container-shadow);
+    overflow: hidden;
+}
+.modal-overlay .modal-header {
+    background: var(--app-modal-header-bg);
+    padding: 15px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--app-modal-border);
+}
+.modal-overlay .modal-header h3 { margin: 0; font-size: 1.1rem; color: var(--app-text); }
+.modal-overlay .modal-close { cursor: pointer; font-size: 1.5rem; color: var(--app-text-muted); }
+
+.modal-overlay .modal-body { padding: 20px; }
+.modal-overlay .input-group { margin-bottom: 15px; }
+.modal-overlay .input-group label { display: block; font-size: 0.9rem; margin-bottom: 5px; color: var(--app-text-muted); }
+.modal-overlay .input-group input, .modal-overlay .input-group select {
+    width: 100%; padding: 8px; border: 1px solid var(--app-border); border-radius: 4px; box-sizing: border-box;
+    background: var(--app-input-bg);
+    color: var(--app-text);
+}
+
+.modal-overlay .modal-footer {
+    padding: 15px; background: var(--app-modal-footer-bg); text-align: right; border-top: 1px solid var(--app-modal-border);
+}
+
+/* 登録ボタンの無効状態 */
+.btn-add:disabled {
+    background-color: #ccc !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* 従来の .modal（設定・メモ・年間日程）内フォーム */
+.modal .input-group label {
+    display: block;
+    font-size: 0.9rem;
+    margin-bottom: 5px;
+    color: var(--app-text-muted);
+}
+.modal .input-group input[type="text"],
+.modal .input-group input[type="date"],
+.modal .input-group select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--app-border);
+    border-radius: 4px;
+    box-sizing: border-box;
+    background: var(--app-input-bg);
+    color: var(--app-text);
+    font-size: 0.9rem;
+}
+.modal .modal-content h3 { color: var(--app-text); }
+
+/* 設定モーダル内の動的カテゴリ行（renderSettingsCategoryEditor） */
+.settings-cat-row {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    font-size: 0.85rem;
+}
+.settings-cat-slot-num,
+.settings-cat-hide-label {
+    color: var(--app-text-muted);
+}
+.settings-cat-hide-label {
+    white-space: nowrap;
+}
+#settingsCategoryRows .settings-cat-name-input {
+    width: 100%;
+    padding: 4px 8px;
+    box-sizing: border-box;
+    border: 1px solid var(--app-border);
+    border-radius: 3px;
+    background: var(--app-input-bg);
+    color: var(--app-text);
+}
+
+/* ========= 配色テーマ（data-theme on <html>） ========= */
+html[data-theme="sepia"] {
+    --main-black: #4a4039;
+    --border-color: #c9b8a8;
+    --bg-light: #ebe0d4;
+    --app-page-bg: #e8dfd4;
+    --app-text: #3d3429;
+    --app-text-dim: #5c4f42;
+    --app-text-muted: #6d5f52;
+    --app-surface: #f7f1e8;
+    --app-surface-2: #ede5da;
+    --app-surface-muted: #e8dfd4;
+    --app-surface-label: #faf6ef;
+    --app-surface-sticky-corner: #e0d6c8;
+    --app-border: #c9b8a8;
+    --app-border-light: #dccfbf;
+    --app-border-strong: #b5a290;
+    --app-container-shadow: rgba(74, 64, 57, 0.12);
+    --app-tab-inactive-bg: #d4c4b4;
+    --app-tab-inactive-text: #4a4039;
+    --app-tab-archive-bg: #e8dfd4;
+    --app-row-hover: #ebe3d6;
+    --app-row-base: #f7f1e8;
+    --app-row-alt: #e2ebd4;
+    --app-row-completed-bg: #e5ddd2;
+    --app-row-completed-text: #7a6b5e;
+    --app-btn-sub-bg: #d4c4b4;
+    --app-btn-sub-text: #3d3429;
+    --app-view-active-bg: #5d6d4a;
+    --app-view-inactive-bg: #e0d6c8;
+    --app-view-inactive-text: #4a4039;
+    --app-modal-bg: #faf6ee;
+    --app-modal-header-bg: #ede5da;
+    --app-modal-footer-bg: #ede5da;
+    --app-modal-border: #dccfbf;
+    --app-input-bg: #fffdf8;
+    --app-timeline-month-collapsed: #e0d6c8;
+    --app-timeline-month-open: #f7f1e8;
+    --app-timeline-grid-line: #dccfbf;
+    --app-month-bar-bg: #e8dfd4;
+    --app-memo-modal-bg: #fff9e6;
+    --app-gear-bg: #d4c4b4;
+    --app-gear-hover: #c9b8a8;
+    --app-theme-toggle-bg: #d4c4b4;
+    --app-theme-toggle-hover: #c9b8a8;
+    --app-dep-bulk-bg: #ede5da;
+    --app-dep-bulk-text: #4a4039;
+    --app-btn-add-bg: #4a4039;
+    --app-btn-add-color: #faf6ee;
+    --app-table-th-bg: #4a4039;
+    --app-table-th-color: #faf6ee;
+    --app-table-td-border: #dccfbf;
+}
+
+html[data-theme="cool"] {
+    --main-black: #2c3e50;
+    --border-color: #a8b8c9;
+    --bg-light: #e4ecf4;
+    --app-page-bg: #dfe8f0;
+    --app-text: #24303d;
+    --app-text-dim: #3d4f63;
+    --app-text-muted: #5a6b7d;
+    --app-surface: #fafcff;
+    --app-surface-2: #eef4fb;
+    --app-surface-muted: #e4ecf4;
+    --app-surface-label: #f5f8fc;
+    --app-surface-sticky-corner: #dce6f2;
+    --app-border: #b8c5d4;
+    --app-border-light: #d0dbe8;
+    --app-border-strong: #9eb0c4;
+    --app-container-shadow: rgba(36, 48, 61, 0.1);
+    --app-tab-inactive-bg: #c5d2e0;
+    --app-tab-inactive-text: #2c3e50;
+    --app-tab-archive-bg: #e8f0f8;
+    --app-row-hover: #e3eef9;
+    --app-row-base: #fafcff;
+    --app-row-alt: #ddeaf5;
+    --app-row-completed-bg: #eef4fb;
+    --app-row-completed-text: #6b7d8f;
+    --app-btn-sub-bg: #c5d2e0;
+    --app-btn-sub-text: #24303d;
+    --app-view-active-bg: #1a5fb4;
+    --app-view-inactive-bg: #e4ecf4;
+    --app-view-inactive-text: #2c3e50;
+    --app-modal-bg: #fafcff;
+    --app-modal-header-bg: #eef4fb;
+    --app-modal-footer-bg: #eef4fb;
+    --app-modal-border: #d0dbe8;
+    --app-input-bg: #ffffff;
+    --app-timeline-month-collapsed: #dce6f2;
+    --app-timeline-month-open: #fafcff;
+    --app-timeline-grid-line: #d0dbe8;
+    --app-month-bar-bg: #e4ecf4;
+    --app-memo-modal-bg: #f8fbff;
+    --app-gear-bg: #c5d2e0;
+    --app-gear-hover: #b8c5d4;
+    --app-theme-toggle-bg: #c5d2e0;
+    --app-theme-toggle-hover: #b8c5d4;
+    --app-dep-bulk-bg: #eef4fb;
+    --app-dep-bulk-text: #2c3e50;
+    --app-btn-add-bg: #2c3e50;
+    --app-btn-add-color: #fafcff;
+    --app-table-th-bg: #2c3e50;
+    --app-table-th-color: #fafcff;
+    --app-table-td-border: #d0dbe8;
+}
+
+/* ソフト：低彩度のパステル（ラベンダー〜グレー基調） */
+html[data-theme="soft"] {
+    --main-black: #5a5472;
+    --border-color: #cfc8de;
+    --bg-light: #ebe6f4;
+    --app-page-bg: #e8e4f2;
+    --app-text: #434056;
+    --app-text-dim: #5c5670;
+    --app-text-muted: #756f8a;
+    --app-surface: #faf8fc;
+    --app-surface-2: #f0ecf8;
+    --app-surface-muted: #e8e3f2;
+    --app-surface-label: #f7f5fb;
+    --app-surface-sticky-corner: #e4dfef;
+    --app-border: #d4cfe0;
+    --app-border-light: #e6e1ef;
+    --app-border-strong: #c4bdd4;
+    --app-container-shadow: rgba(67, 64, 86, 0.08);
+    --app-tab-inactive-bg: #ddd8ea;
+    --app-tab-inactive-text: #5c5670;
+    --app-tab-archive-bg: #ebe7f4;
+    --app-row-hover: #eae6f5;
+    --app-row-base: #faf8fc;
+    --app-row-alt: #e8f0ec;
+    --app-row-completed-bg: #ebe8f2;
+    --app-row-completed-text: #8a8499;
+    --app-btn-sub-bg: #dcd7ea;
+    --app-btn-sub-text: #434056;
+    --app-view-active-bg: #7b6fad;
+    --app-view-inactive-bg: #eae7f2;
+    --app-view-inactive-text: #5c5670;
+    --app-modal-bg: #fcfbff;
+    --app-modal-header-bg: #f0ecf8;
+    --app-modal-footer-bg: #f0ecf8;
+    --app-modal-border: #e4dfef;
+    --app-input-bg: #ffffff;
+    --app-timeline-month-collapsed: #e4dfef;
+    --app-timeline-month-open: #faf8fc;
+    --app-timeline-grid-line: #e4dfef;
+    --app-month-bar-bg: #e8e3f2;
+    --app-memo-modal-bg: #fffaf7;
+    --app-gear-bg: #dcd7ea;
+    --app-gear-hover: #cfc8de;
+    --app-theme-toggle-bg: #dcd7ea;
+    --app-theme-toggle-hover: #cfc8de;
+    --app-dep-bulk-bg: #f0ecf8;
+    --app-dep-bulk-text: #5c5670;
+    --app-btn-add-bg: #5a5280;
+    --app-btn-add-color: #faf8ff;
+    --app-table-th-bg: #5a5280;
+    --app-table-th-color: #faf8ff;
+    --app-table-td-border: #e4dfef;
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+    --main-black: #8ab4f8;
+    --border-color: #5f6368;
+    --bg-light: #303034;
+    --app-page-bg: #121212;
+    --app-text: #e8eaed;
+    --app-text-dim: #bdc1c6;
+    --app-text-muted: #9aa0a6;
+    --app-surface: #1e1e22;
+    --app-surface-2: #2a2a30;
+    --app-surface-muted: #2d2d33;
+    --app-surface-label: #252528;
+    --app-surface-sticky-corner: #35353a;
+    --app-border: #3c4043;
+    --app-border-light: #3c4043;
+    --app-border-strong: #5f6368;
+    --app-container-shadow: rgba(0, 0, 0, 0.45);
+    --app-tab-inactive-bg: #3c4043;
+    --app-tab-inactive-text: #bdc1c6;
+    --app-tab-archive-bg: #2a2a30;
+    --app-row-hover: #30343c;
+    --app-row-base: #1e1e22;
+    --app-row-alt: #1e2a1e;
+    --app-row-completed-bg: #2a2a30;
+    --app-row-completed-text: #80868b;
+    --app-btn-sub-bg: #3c4043;
+    --app-btn-sub-text: #e8eaed;
+    --app-view-active-bg: #8ab4f8;
+    --app-view-inactive-bg: #303034;
+    --app-view-inactive-text: #bdc1c6;
+    --app-modal-bg: #292a2d;
+    --app-modal-header-bg: #35363a;
+    --app-modal-footer-bg: #35363a;
+    --app-modal-border: #3c4043;
+    --app-input-bg: #1e1e22;
+    --app-timeline-month-collapsed: #3c4043;
+    --app-timeline-month-open: #1e1e22;
+    --app-timeline-grid-line: #3c4043;
+    --app-timeline-sunday-band: rgba(220, 120, 120, 0.12);
+    --app-month-bar-bg: #35363a;
+    --app-memo-modal-bg: #2d2a22;
+    --app-gear-bg: #3c4043;
+    --app-gear-hover: #5f6368;
+    --app-theme-toggle-bg: #3c4043;
+    --app-theme-toggle-hover: #5f6368;
+    --app-dep-bulk-bg: #35363a;
+    --app-dep-bulk-text: #bdc1c6;
+    --app-btn-add-bg: #8ab4f8;
+    --app-btn-add-color: #202124;
+    --app-table-th-bg: #35363a;
+    --app-table-th-color: #e8eaed;
+    --app-table-td-border: #3c4043;
+}
+
+html[data-theme="dark"] tbody tr:hover,
+html[data-theme="dark"] .timeline-row:hover {
+    background-color: #30343c !important;
+}
+
+html[data-theme="dark"] .status-btn {
+    border-color: #5f6368;
+}
+
+/* ダーク：期限切れは暗めの赤に抑え、白飛び・強い光彩を避ける */
+html[data-theme="dark"] tr.expired {
+    background-color: rgba(90, 28, 32, 0.42) !important;
+}
+html[data-theme="dark"] tr.expired td {
+    color: #b87a7a !important;
+}
+html[data-theme="dark"] tr.expired .bar,
+html[data-theme="dark"] .timeline-row.expired .bar {
+    background-color: #6e2424 !important;
+    opacity: 0.92;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35) !important;
+}
+html[data-theme="dark"] tbody tr.expired:hover {
+    background-color: rgba(100, 32, 36, 0.5) !important;
+}
+
+/* ダーク：タイムラインの期限切れ行（インライン背景を抑えめの赤に） */
+html[data-theme="dark"] .sticky-label.timeline-expired {
+    background-color: rgba(90, 28, 32, 0.42) !important;
+}
+html[data-theme="dark"] .sticky-label.timeline-expired .label-text {
+    color: #b87a7a;
+}
+html[data-theme="dark"] .timeline-row-area.timeline-expired {
+    background-color: rgba(90, 28, 32, 0.38) !important;
+}
+html[data-theme="dark"] .timeline-bar.timeline-expired {
+    background-color: #6e2424 !important;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
