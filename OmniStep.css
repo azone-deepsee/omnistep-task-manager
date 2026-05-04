@@ -1510,6 +1510,26 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     word-break: break-word;
 }
 
+/* 親テーマ名が枠から省略されているときの全文ホバー（ヘルプとは別） */
+.theme-overflow-tooltip {
+    position: fixed;
+    z-index: 100023;
+    max-width: min(560px, 92vw);
+    min-width: 10rem;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--app-text);
+    background: var(--app-modal-bg);
+    border: 1px solid var(--app-border-strong);
+    border-left: 4px solid #1a73e8;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px var(--app-container-shadow);
+    pointer-events: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .timeline-resize-handle:hover {
     background: rgba(255, 255, 255, 0.55) !important;
 }
@@ -1863,4 +1883,162 @@ html[data-theme="dark"] .timeline-row-area.timeline-expired {
 html[data-theme="dark"] .timeline-bar.timeline-expired {
     background-color: #6e2424 !important;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+/* =============================================================================
+   タブレット〜中幅（iPad 等）：一覧テーブルの「業務内容」列が潰れる・行が縦に伸びすぎる対策
+   ============================================================================= */
+
+.task-list {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+}
+
+/* table-layout:fixed のとき可変列が 0 幅に落ちるのを防ぐ（横スクロールで全体を見られる） */
+#taskTable {
+    min-width: 1040px;
+    width: max(100%, 1040px);
+}
+
+/* FirstFlag / TargetFlag：期間列（7列目）と同じ 110px に固定 */
+#taskTable th:nth-child(4),
+#taskTable td:nth-child(4),
+#taskTable th:nth-child(5),
+#taskTable td:nth-child(5) {
+    width: 110px;
+    min-width: 110px;
+    max-width: 110px;
+    box-sizing: border-box;
+}
+
+#taskTable th:nth-child(7),
+#taskTable td:nth-child(7) {
+    width: 110px;
+    min-width: 110px;
+    max-width: 110px;
+    box-sizing: border-box;
+}
+
+#taskTable th:nth-child(6),
+#taskTable td:nth-child(6) {
+    min-width: 200px;
+    width: 22%;
+    max-width: none;
+}
+
+@media (max-width: 1280px) {
+    body {
+        padding: 10px 12px;
+    }
+
+    .container {
+        width: 100%;
+        max-width: none;
+        padding: 12px;
+        box-sizing: border-box;
+    }
+
+    .controls-row {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        row-gap: 10px;
+    }
+
+    .controls-row > div:first-child {
+        flex: 1 1 200px;
+        min-width: 0;
+    }
+
+    .action-buttons {
+        flex: 1 1 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+
+    .tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .tab {
+        flex: 0 0 auto;
+    }
+
+    .external-header {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 12px;
+        max-width: none;
+        margin: 0 0 10px 0;
+    }
+
+    .external-header h1 {
+        font-size: clamp(1.1rem, 3.5vw, 1.5rem);
+        word-break: break-word;
+    }
+
+    .header-right-group {
+        flex-wrap: wrap !important;
+        justify-content: flex-start;
+        gap: 8px !important;
+    }
+
+    #taskTable th:nth-child(3),
+    #taskTable td:nth-child(3) {
+        width: 220px;
+        min-width: 180px;
+    }
+
+    #taskTable th,
+    #taskTable td {
+        height: auto;
+        min-height: var(--row-height);
+        vertical-align: top;
+        box-sizing: border-box;
+    }
+
+    /* 1行省略で本文が消えないよう、業務内容列だけは折り返し表示 */
+    #taskTable td:nth-child(6) {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+    }
+
+    .issue-cell-inner {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .issue-text {
+        flex: 1 1 100%;
+        min-width: 0;
+        word-break: break-word;
+    }
+
+    .parent-issue-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+    }
+
+    .theme-cell {
+        flex-wrap: wrap;
+    }
+
+    .theme-cell-main {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .timeline-unified-wrapper {
+        max-width: 100%;
+    }
 }

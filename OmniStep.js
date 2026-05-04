@@ -93,6 +93,11 @@ function showHelpHoverTooltip(text, clientX, clientY) {
 }
 
 function onDocumentMouseMoveHelpHover(e) {
+    const truncTheme = e.target.closest(".theme-name.theme-name-parent");
+    if (truncTheme && truncTheme.scrollWidth > truncTheme.clientWidth + 1) {
+        hideHelpHoverTooltip();
+        return;
+    }
     if (!helpHoverOn) return;
     let t = e.target.closest("[data-help]");
     if (!t) {
@@ -111,13 +116,75 @@ function onDocumentMouseMoveHelpHover(e) {
     showHelpHoverTooltip(dh, e.clientX, e.clientY);
 }
 
+let themeOverflowTooltipEl = null;
+let themeOverflowMoveBound = false;
+
+function hideThemeOverflowTooltip() {
+    if (!themeOverflowTooltipEl) return;
+    themeOverflowTooltipEl.style.display = "none";
+    themeOverflowTooltipEl.setAttribute("aria-hidden", "true");
+}
+
+function ensureThemeOverflowTooltipEl() {
+    if (!themeOverflowTooltipEl) {
+        themeOverflowTooltipEl = document.getElementById("theme-overflow-tooltip");
+        if (!themeOverflowTooltipEl) {
+            themeOverflowTooltipEl = document.createElement("div");
+            themeOverflowTooltipEl.id = "theme-overflow-tooltip";
+            themeOverflowTooltipEl.className = "theme-overflow-tooltip";
+            themeOverflowTooltipEl.setAttribute("role", "tooltip");
+            themeOverflowTooltipEl.setAttribute("aria-hidden", "true");
+            document.body.appendChild(themeOverflowTooltipEl);
+        }
+    }
+    return themeOverflowTooltipEl;
+}
+
+function showThemeOverflowTooltip(text, clientX, clientY) {
+    const el = ensureThemeOverflowTooltipEl();
+    el.textContent = text;
+    el.style.display = "block";
+    el.setAttribute("aria-hidden", "false");
+    const offX = 14;
+    const offY = 20;
+    let x = clientX + offX;
+    let y = clientY + offY;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    const rect = el.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 6) x = window.innerWidth - rect.width - 6;
+    if (rect.bottom > window.innerHeight - 6) y = clientY - rect.height - 8;
+    el.style.left = `${Math.max(6, x)}px`;
+    el.style.top = `${Math.max(6, y)}px`;
+}
+
+/** 親テーマ名が省略されているときだけ全文を表示（ヘルプとは別要素） */
+function onDocumentMouseMoveThemeOverflow(e) {
+    let nameEl = e.target.closest(".theme-name.theme-name-parent");
+    if (!nameEl) {
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        if (under) nameEl = under.closest(".theme-name.theme-name-parent");
+    }
+    if (!nameEl || !document.body.contains(nameEl)) {
+        hideThemeOverflowTooltip();
+        return;
+    }
+    if (nameEl.scrollWidth <= nameEl.clientWidth + 1) {
+        hideThemeOverflowTooltip();
+        return;
+    }
+    showThemeOverflowTooltip(nameEl.innerText.trim(), e.clientX, e.clientY);
+}
+
 function bindHelpHoverListeners() {
     if (helpHoverMoveBound) return;
+    document.addEventListener("mousemove", onDocumentMouseMoveThemeOverflow, true);
     document.addEventListener("mousemove", onDocumentMouseMoveHelpHover, true);
     window.addEventListener(
         "scroll",
         () => {
             if (helpHoverOn) hideHelpHoverTooltip();
+            hideThemeOverflowTooltip();
         },
         true
     );
@@ -141,6 +208,7 @@ function toggleHelpHover() {
         /* ignore */
     }
     if (!helpHoverOn) hideHelpHoverTooltip();
+    hideThemeOverflowTooltip();
     applyHelpHoverToDocument();
     showToast(helpHoverOn ? "ヘルプ表示：ON（各所にホバーで説明）" : "ヘルプ表示：OFF");
 }
@@ -1512,20 +1580,23 @@ function renderAll() {
         const extLockHtml = isExt
             ? `<span class="external-lock"${helpAttr('外部CSV：閲覧専用のため一覧からは編集できません')}>🔒</span>`
             : "";
+        const parentThemeHelp = isParent
+            ? helpAttr("テーマ名：親タスクのテーマ／課題の見出しを編集します")
+            : "";
+        const childThemeHelp = !isParent
+            ? helpAttr("表示名：子タスクのテーマ列に出す短い表示を編集します")
+            : "";
+        const themeNameClass = isParent ? "theme-name theme-name-parent" : "theme-name";
         const col3 = `<td style="${cellStyle}">
             <div class="theme-cell${isExt ? " external-task-row" : ""}">
-                <div class="theme-cell-main">
+                <div class="theme-cell-main"${parentThemeHelp}>
                     <div class="theme-top">
                         ${accordionBtn}
                         ${extLockHtml}
-                        <span class="theme-name"
+                        <span class="${themeNameClass}"
                               contenteditable="${!isLocked}"
                               oninput="updateDataSilent(${task.id}, 'PrimaryStep', this.innerText)"
-                              onblur="renderAll()"${helpAttr(
-                                  isParent
-                                      ? "テーマ名：親タスクのテーマ／課題の見出しを編集します"
-                                      : "表示名：子タスクのテーマ列に出す短い表示を編集します"
-                              )}>${getPrimaryStep(task)}</span>
+                              onblur="renderAll()"${childThemeHelp}>${getPrimaryStep(task)}</span>
                     </div>
                     <div class="theme-meta">
                         <span class="theme-code">[${getDisplayTaskCode(task)}]</span>
