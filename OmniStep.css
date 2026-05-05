@@ -513,13 +513,14 @@ button:disabled {
 /* スクロールTOPへボタン（左下追従） */
 .scroll-top-floating-btn {
     position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 18px;
+    transform: none;
     bottom: 18px;
     z-index: 9999;
-    padding: 8px 12px;
+    padding: 8px 14px;
     border-radius: 999px;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+    min-width: 9.8rem; /* 少しだけ幅を確保（見落とし防止） */
 }
 
 #inContent { flex: 1.5; }

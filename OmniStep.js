@@ -409,6 +409,32 @@ function maxDateStr(a, b) {
     return a > b ? a : b; // "YYYY-MM-DD" なので辞書順比較でOK
 }
 
+function isIsoDateInOwnPeriod(task, iso) {
+    if (!task || !iso) return true;
+    const s = task.startDate || "";
+    const e = task.deadline || "";
+    if (s && iso < s) return false;
+    if (e && iso > e) return false;
+    return true;
+}
+
+function warnIfMarkersOutsideOwnPeriod(task) {
+    if (!task || isParentTask(task)) return;
+    const s = task.startDate || "";
+    const e = task.deadline || "";
+    if (!s && !e) return;
+    const ms = task.msDate || "";
+    const tar = String(getTargetDate(task) || "");
+    const outMs = ms && !isIsoDateInOwnPeriod(task, ms);
+    const outTar = tar && /^\d{4}-\d{2}-\d{2}$/.test(tar) && !isIsoDateInOwnPeriod(task, tar);
+    if (outMs || outTar) {
+        const parts = [];
+        if (outMs) parts.push("◇");
+        if (outTar) parts.push("★");
+        showToast(`${parts.join("・")} が期間外です（期間内に調整してください）`);
+    }
+}
+
 function syncFamilyCategory(familyKey, category) {
     let changed = false;
     tasks.forEach(t => {
@@ -458,6 +484,33 @@ function getDependencyPrevDeadlineMin(task) {
     if (!task || !task.fFlag) return "";
     const prev = getPrevChildTask(task);
     return prev?.deadline || "";
+}
+
+function canEnableDependencyForChild(task) {
+    if (!task || isParentTask(task) || isExternalTask(task) || task.archived || task.status === "完了") return false;
+    if (getTaskBranchNo(task) === "010") return false;
+    // 既に期間が入っている場合のみ、矛盾チェックでONを拒否
+    const prevDeadline = getPrevChildTask(task)?.deadline || "";
+    if (prevDeadline && task.startDate && prevDeadline > task.startDate) return false;
+    return true;
+}
+
+function getMarkersMinMaxDate(task) {
+    if (!task) return { min: null, max: null };
+    const dates = [];
+    const ms = task.msDate ? new Date(task.msDate) : null;
+    if (ms && !isNaN(ms)) dates.push(ms);
+    const tarIso = String(getTargetDate(task) || "");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tarIso)) {
+        const td = new Date(tarIso);
+        if (!isNaN(td)) dates.push(td);
+    }
+    if (dates.length === 0) return { min: null, max: null };
+    const min = new Date(Math.min(...dates.map(d => d.getTime())));
+    const max = new Date(Math.max(...dates.map(d => d.getTime())));
+    min.setHours(0, 0, 0, 0);
+    max.setHours(0, 0, 0, 0);
+    return { min, max };
 }
 
 function addDaysToDateStr(dateStr, days) {
@@ -726,18 +779,27 @@ function toggleFamilyDependency(parentTaskId, checked) {
     if (!parent || !isParentTask(parent) || parent.archived) return;
     if (parent.status === "完了") return;
     const familyKey = getTaskFamilyKey(parent);
+    let blocked = 0;
     tasks.forEach(t => {
         if (t.archived) return;
         if (getTaskFamilyKey(t) !== familyKey) return;
         if (isParentTask(t)) return;
         if (getTaskBranchNo(t) === "010") return; // 最初の子は対象外
         if (t.status === "完了") return; // 完了はロック
+        if (!!checked && t.startDate && !canEnableDependencyForChild(t)) {
+            blocked++;
+            return;
+        }
         t.fFlag = !!checked;
     });
     save();
     renderAll();
     if (typeof renderTimeline === 'function') renderTimeline();
-    showToast(checked ? "このテーマの連携を一括ONにしました" : "このテーマの連携を一括OFFにしました");
+    if (checked && blocked > 0) {
+        showToast(`連携を一括ON：${blocked}件は期間が条件を満たさずONにできませんでした`);
+    } else {
+        showToast(checked ? "このテーマの連携を一括ONにしました" : "このテーマの連携を一括OFFにしました");
+    }
 }
 
 function toggleFamilyDependencyByButton(parentTaskId) {
@@ -985,6 +1047,19 @@ function displayToday() {
     if (dateElement) dateElement.innerText = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日(${w})`;
 }
 
+function updateBodyScrollLock() {
+    // どれか1つでもモーダル/オーバーレイが開いていたら背面スクロールを止める
+    const overlays = Array.from(document.querySelectorAll(".modal, .modal-overlay"));
+    const anyOpen = overlays.some((el) => {
+        if (!el || !document.body.contains(el)) return false;
+        const disp = (el.style && el.style.display) ? el.style.display : "";
+        if (disp && disp !== "none") return true;
+        const cs = window.getComputedStyle(el);
+        return cs && cs.display !== "none" && cs.visibility !== "hidden" && cs.opacity !== "0";
+    });
+    document.body.classList.toggle("no-scroll", anyOpen);
+}
+
 function dateToIsoLocal(d) {
     if (!d || isNaN(d.getTime())) return "";
     const y = d.getFullYear();
@@ -1157,6 +1232,7 @@ function openThemeCalendarModal() {
     renderThemeCalendarInner();
     modal.style.display = "flex";
     modal.setAttribute("aria-hidden", "false");
+    updateBodyScrollLock();
 }
 
 function closeThemeCalendarModal() {
@@ -1165,6 +1241,7 @@ function closeThemeCalendarModal() {
         modal.style.display = "none";
         modal.setAttribute("aria-hidden", "true");
     }
+    updateBodyScrollLock();
 }
 
 function themeCalendarPrevMonth() {
@@ -1494,11 +1571,13 @@ function openSettingsModal() {
         if (radio) radio.checked = val === lt;
     });
     modal.style.display = 'flex';
+    updateBodyScrollLock();
 }
 
 function closeSettingsModal() {
     const modal = document.getElementById('settingsModal');
     if (modal) modal.style.display = 'none';
+    updateBodyScrollLock();
 }
 
 /** 担当者IDが実質未設定か（空・未保存・0のみなど） */
@@ -1617,6 +1696,7 @@ function openTutorialModal(asWelcome) {
     if (!m) return;
     m.style.display = "flex";
     m.classList.toggle("tutorial-modal--welcome", !!asWelcome);
+    updateBodyScrollLock();
 }
 
 function closeTutorialModal() {
@@ -1625,6 +1705,7 @@ function closeTutorialModal() {
         m.style.display = "none";
         m.classList.remove("tutorial-modal--welcome");
     }
+    updateBodyScrollLock();
 }
 
 function saveSettings() {
@@ -1757,10 +1838,14 @@ function renderAll() {
         const branchNo = getTaskBranchNo(task);
         const depEligible = !isParent && branchNo !== "010";
         const depPrevDeadline = depEligible && task.fFlag ? (getPrevChildTask(task)?.deadline || "") : "";
-        const msMin = maxDateStr(task.startDate || "", depPrevDeadline || "");
-        const targetMin = msMin;
+        // 依存（fFlag）は「直前子の納期」を下限にする（期間のみ）
         const startMin = depPrevDeadline || "";
         const deadlineMin = maxDateStr(task.startDate || "", depPrevDeadline || "");
+        // ◇/★ は「自分の期間」に依存（他の子の影響を受けない）
+        const msMin = !isParent ? (task.startDate || "") : "";
+        const msMax = !isParent ? (task.deadline || "") : "";
+        const targetMin = !isParent ? (task.startDate || "") : "";
+        const targetMax = !isParent ? (task.deadline || "") : "";
 
         // ★追加：期限切れの判定ロジック
         const deadlineDate = task.deadline ? new Date(task.deadline) : null;
@@ -1901,6 +1986,7 @@ function renderAll() {
                    value="${task.msDate || ''}"
                    ${isLocked ? 'disabled' : ''}
                    min="${msMin}"
+                   ${msMax ? `max="${msMax}"` : ""}
                    title=""
                    onchange="updateTaskValue(${task.id}, 'msDate', this.value)"
                    style="font-size:0.75rem; border:none; background:transparent; width:100%; text-align:center;">
@@ -1917,6 +2003,7 @@ function renderAll() {
                    value="${getTargetDate(task) || ''}"
                    ${isLocked ? 'disabled' : ''}
                    min="${targetMin}"
+                   ${targetMax ? `max="${targetMax}"` : ""}
                    title=""
                    onchange="updateTaskValue(${task.id}, 'TargetDate', this.value)"
                    style="font-size:0.75rem; border:none; background:transparent; width:100%; text-align:center;">
@@ -2655,6 +2742,12 @@ function startDrag(e, task, bar) {
     const minDaysMoved = minStartDate
         ? Math.round((minStartDate - originalStart) / (1000 * 60 * 60 * 24))
         : null;
+    const markers = getMarkersMinMaxDate(task);
+    // ◇/★ を期間外に出さないための移動範囲（ドラッグ＝期間を平行移動）
+    const markerMinDaysMoved =
+        markers.max ? Math.round((markers.max - originalEnd) / (1000 * 60 * 60 * 24)) : null;
+    const markerMaxDaysMoved =
+        markers.min ? Math.round((markers.min - originalStart) / (1000 * 60 * 60 * 24)) : null;
 
     // ドラッグ中の見た目
     bar.style.transition = "none"; // 【思惑①】移動中はアニメを消してシームレスに
@@ -2665,9 +2758,12 @@ function startDrag(e, task, bar) {
         const deltaX = moveEvent.clientX - startX;
         // 【思惑①】見た目上の位置をリアルタイムに更新
         let previewDays = Math.round(deltaX / 15);
-        if (minDaysMoved !== null) {
-            previewDays = Math.max(previewDays, minDaysMoved);
-        }
+        const lower = Math.max(
+            minDaysMoved !== null ? minDaysMoved : -Infinity,
+            markerMinDaysMoved !== null ? markerMinDaysMoved : -Infinity
+        );
+        const upper = markerMaxDaysMoved !== null ? markerMaxDaysMoved : Infinity;
+        previewDays = Math.max(lower, Math.min(upper, previewDays));
         bar.style.left = `${initialLeft + previewDays * 15}px`;
         const previewStart = new Date(originalStart);
         previewStart.setDate(originalStart.getDate() + previewDays);
@@ -2685,9 +2781,12 @@ function startDrag(e, task, bar) {
     const onMouseUp = (upEvent) => {
         const deltaX = upEvent.clientX - startX;
         let daysMoved = Math.round(deltaX / 15);
-        if (minDaysMoved !== null) {
-            daysMoved = Math.max(daysMoved, minDaysMoved);
-        }
+        const lower = Math.max(
+            minDaysMoved !== null ? minDaysMoved : -Infinity,
+            markerMinDaysMoved !== null ? markerMinDaysMoved : -Infinity
+        );
+        const upper = markerMaxDaysMoved !== null ? markerMaxDaysMoved : Infinity;
+        daysMoved = Math.max(lower, Math.min(upper, daysMoved));
         if (daysMoved !== 0) {
             const newStart = new Date(originalStart);
             newStart.setDate(originalStart.getDate() + daysMoved);
@@ -2721,6 +2820,12 @@ function startResize(e, task, bar) {
     const originalWidth = parseFloat(bar.style.width) || 15;
     const baseStart = task.startDate || task.deadline || task.msDate;
     const startDate = baseStart ? new Date(baseStart) : new Date();
+    const markers = getMarkersMinMaxDate(task);
+    // リサイズ＝納期（右端）だけ変更。◇/★ が期間外に出ないよう、納期の最小値を底上げ
+    const minEndByMarkers =
+        markers.max ? dateToIsoLocal(markers.max) : "";
+    // YYYY-MM-DD は UTC 解釈→toISOString は安定。setHours を触ると前日ズレし得るので、着手は入力値を固定で使う
+    const startIso = (task.startDate || startDate.toISOString().split("T")[0]) || "";
 
     const onMouseMove = (moveEvent) => {
         const deltaX = moveEvent.clientX - startX;
@@ -2738,7 +2843,19 @@ function startResize(e, task, bar) {
             const widthPx = Math.max(15, (diffDays + 1) * 15);
             bar.style.width = `${widthPx}px`;
         }
-        task.startDate = startDate.toISOString().split('T')[0];
+        // ◇/★ が startDate より前にある場合、リサイズだけでは救えない（ドラッグで前に動かす必要）
+        if (markers.min && dateToIsoLocal(markers.min) < startIso) {
+            // 表示だけ崩れないようにしつつ、警告
+            showToast("◇/★ が着手日より前です（バーを左へ動かして期間に入れてください）");
+        }
+        if (minEndByMarkers && newDeadlineStr < minEndByMarkers) {
+            newDeadlineStr = minEndByMarkers;
+            const clamped = new Date(minEndByMarkers);
+            const diffDays = Math.round((clamped - startDate) / (1000 * 60 * 60 * 24));
+            const widthPx = Math.max(15, (diffDays + 1) * 15);
+            bar.style.width = `${widthPx}px`;
+        }
+        task.startDate = startIso;
         task.deadline = newDeadlineStr;
         reflectTaskDatesInList(task);
         syncParentDates(getTaskFamilyKey(task));
@@ -2806,8 +2923,26 @@ function updateTaskValue(taskId, field, value) {
             return;
         }
         const depPrevDeadline = getDependencyPrevDeadlineMin(task);
-        if (depPrevDeadline && (field === 'msDate' || field === 'TargetDate' || field === 'target')) {
-            if (value && value < depPrevDeadline) value = depPrevDeadline;
+        // ◇/★ は「自分の期間」に依存（他の子の影響を受けない）
+        if (!isParentTask(task) && (field === "msDate" || field === "TargetDate" || field === "target")) {
+            if (value) {
+                const v = String(value);
+                if (!isIsoDateInOwnPeriod(task, v)) {
+                    showToast("◇/★ はこの子タスクの期間内に設定してください");
+                    // 入力は反映せず終了
+                    renderAll();
+                    return;
+                }
+            }
+        }
+
+        // 依存ON時：期間が既に入っていて矛盾する場合はONにしない（警告）
+        if (field === "fFlag" && !!value) {
+            if (!canEnableDependencyForChild(task)) {
+                showToast("連携ONにできません：直前の子の納期がこの子の着手日より後です");
+                renderAll();
+                return;
+            }
         }
         // 1. 配列内のデータを書き換え
         if (field === "PrimaryStep" || field === "content") setPrimaryStep(tasks[index], value);
@@ -2861,7 +2996,18 @@ function updateMasterDropdown() {
 function updateTaskFromMaster(taskId, newName) {
     const task = tasks.find(t => t.id === taskId);
     const masterEntry = yearlyMaster.find(m => m.name === newName);
-    if (task && !isExternalTask(task)) { setFirstFlag(task, newName); task.msDate = masterEntry ? masterEntry.date : ""; save(); renderAll(); }
+    if (!task || isExternalTask(task)) return;
+    setFirstFlag(task, newName);
+    const nextDate = masterEntry ? (masterEntry.date || "") : "";
+    if (nextDate && !isIsoDateInOwnPeriod(task, nextDate)) {
+        showToast("◇日付がこの子タスクの期間外のため、マスターから設定できません");
+        save();
+        renderAll();
+        return;
+    }
+    task.msDate = nextDate;
+    save();
+    renderAll();
 }
 
 function updateTaskTargetFromMaster(taskId, newName) {
@@ -2869,7 +3015,14 @@ function updateTaskTargetFromMaster(taskId, newName) {
     const masterEntry = yearlyMaster.find(m => m.name === newName);
     if (task && !isExternalTask(task)) {
         setTargetName(task, newName);
-        setTargetDate(task, masterEntry ? masterEntry.date : "");
+        const nextDate = masterEntry ? (masterEntry.date || "") : "";
+        if (nextDate && !isIsoDateInOwnPeriod(task, nextDate)) {
+            showToast("★日付がこの子タスクの期間外のため、マスターから設定できません");
+            save();
+            renderAll();
+            return;
+        }
+        setTargetDate(task, nextDate);
         save();
         renderAll();
     }
@@ -2920,6 +3073,11 @@ function updateTaskDate(id, field, value) {
             // 納期を着手日より前にしようとしたら、強制的に着手日と同じにする
             task.deadline = task.startDate;
             showToast("納期は着手日以降に設定してください");
+        }
+
+        // 期間を設定/変更したら、◇/★ が自分の期間外なら警告（他の子には影響しない）
+        if (!isParentTask(task) && (field === "startDate" || field === "deadline")) {
+            warnIfMarkersOutsideOwnPeriod(task);
         }
 
         // 親の着手・納期がどちらも空だった状態で着手日を入れたときだけ、子へ連番でコピー（タイムラインで個別調整可）
@@ -3287,6 +3445,7 @@ function closeMemo() {
     if (saveBtn) saveBtn.style.display = "";
     const ta = document.getElementById('memoText');
     if (ta) ta.readOnly = false;
+    updateBodyScrollLock();
 }
 
 // 補足：メモを開く関数も、これと対になるように ID を確認してください
@@ -3301,6 +3460,7 @@ function openMemo(taskId) {
     }
     if (saveBtn) saveBtn.style.display = isExternalTask(task) ? "none" : "";
     document.getElementById('memoModal').style.display = 'flex'; // 中央に表示
+    updateBodyScrollLock();
 }
 function saveMemo() {
     const text = document.getElementById('memoText').value;
@@ -3331,13 +3491,13 @@ function setupEnterKey() {
 function openYearlyMaster() {
     const modal = document.getElementById('yearlyMasterModal');
     if (modal) modal.style.display = 'flex';
-    document.body.classList.add('no-scroll');
+    updateBodyScrollLock();
     renderMasterList();
 }
 function closeYearlyMaster() {
     const modal = document.getElementById('yearlyMasterModal');
     if (modal) modal.style.display = 'none';
-    document.body.classList.remove('no-scroll');
+    updateBodyScrollLock();
     renderAll();
 }
 // A: 新規追加
@@ -4336,11 +4496,13 @@ function openNewTaskModal() {
     validateNewTask();
     document.getElementById('newTaskModal').style.display = 'flex';
     document.getElementById('newContent').focus();
+    updateBodyScrollLock();
 }
 
 // モーダルを閉じる
 function closeNewTaskModal() {
     document.getElementById('newTaskModal').style.display = 'none';
+    updateBodyScrollLock();
 }
 
 // 登録実行（親タスク専用）
