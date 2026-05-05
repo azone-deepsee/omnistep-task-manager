@@ -938,6 +938,7 @@ window.onload = () => {
     migrateTaskCodesIfNeeded();
     ensureFamilyCategoriesSyncedIfNeeded();
     displayToday();
+    initThemeCalendarUi();
     updateTitleDisplay(); // タイトルを表示
     renderTabs();
     renderAll();
@@ -982,6 +983,229 @@ function displayToday() {
     const w = ["日", "月", "火", "水", "木", "金", "土"][now.getDay()];
     const dateElement = document.getElementById('todayDate');
     if (dateElement) dateElement.innerText = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日(${w})`;
+}
+
+function dateToIsoLocal(d) {
+    if (!d || isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    return `${y}-${mo}-${da}`;
+}
+
+const THEME_CAL_BAR_COLORS = ["#4285f4", "#0f9d58", "#ab47bc", "#e8710a", "#00838f"];
+
+let themeCalendarYear = null;
+let themeCalendarMonth = null;
+
+function getThemeCalendarSegments() {
+    const pool = tasks.concat(externalTasks || []).filter((t) => !t.archived);
+    const parents = pool.filter((t) => isParentTask(t));
+    const segs = [];
+    let colorIdx = 0;
+    parents.forEach((parent) => {
+        const fk = getTaskFamilyKey(parent);
+        let s = parent.startDate || "";
+        let e = parent.deadline || "";
+        if (!s || !e) {
+            const kids = pool.filter((t) => getTaskFamilyKey(t) === fk && !isParentTask(t));
+            if (kids.length) {
+                const ss = kids.map((k) => k.startDate).filter(Boolean);
+                const ee = kids.map((k) => k.deadline).filter(Boolean);
+                if (!s && ss.length) s = ss.reduce((a, b) => (a < b ? a : b));
+                if (!e && ee.length) e = ee.reduce((a, b) => (a > b ? a : b));
+            }
+        }
+        if (!s || !e) return;
+        if (s > e) {
+            const x = s;
+            s = e;
+            e = x;
+        }
+        const isExt = isExternalTask(parent);
+        segs.push({
+            label: getThemeLabel(parent),
+            start: s,
+            end: e,
+            isExt,
+            color: isExt ? "#5c6bc0" : THEME_CAL_BAR_COLORS[colorIdx++ % THEME_CAL_BAR_COLORS.length],
+        });
+    });
+    return segs;
+}
+
+function getCalendarWeekDates(year, month0) {
+    const first = new Date(year, month0, 1);
+    const pad = first.getDay();
+    const start = new Date(year, month0, 1 - pad);
+    const weeks = [];
+    const cur = new Date(start);
+    for (let w = 0; w < 6; w++) {
+        const row = [];
+        for (let i = 0; i < 7; i++) {
+            row.push(new Date(cur.getFullYear(), cur.getMonth(), cur.getDate()));
+            cur.setDate(cur.getDate() + 1);
+        }
+        weeks.push(row);
+    }
+    return weeks;
+}
+
+function segmentWeekColumns(segStart, segEnd, weekDates) {
+    let minC = -1;
+    let maxC = -1;
+    for (let c = 0; c < 7; c++) {
+        const iso = dateToIsoLocal(weekDates[c]);
+        if (iso >= segStart && iso <= segEnd) {
+            if (minC === -1) minC = c;
+            maxC = c;
+        }
+    }
+    if (minC === -1) return null;
+    return { startCol: minC, endCol: maxC };
+}
+
+function assignThemeCalTracks(intervals) {
+    intervals.sort((a, b) => a.startCol - b.startCol || a.endCol - b.endCol);
+    const lastEndOnTrack = [];
+    intervals.forEach((inv) => {
+        let t = 0;
+        while (lastEndOnTrack[t] !== undefined && lastEndOnTrack[t] >= inv.startCol) t++;
+        lastEndOnTrack[t] = inv.endCol;
+        inv.track = t;
+    });
+}
+
+function renderThemeCalendarInner() {
+    const host = document.getElementById("themeCalendarGrid");
+    const labelEl = document.getElementById("themeCalMonthLabel");
+    if (!host || !labelEl || themeCalendarYear == null) return;
+
+    const y = themeCalendarYear;
+    const m = themeCalendarMonth;
+    labelEl.textContent = `${y}年 ${m + 1}月`;
+
+    const segments = getThemeCalendarSegments();
+    const weeks = getCalendarWeekDates(y, m);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayIso = dateToIsoLocal(today);
+
+    const dow = ["日", "月", "火", "水", "木", "金", "土"];
+    let html = `<div class="theme-cal-dow-row">`;
+    dow.forEach((ch, i) => {
+        const cls = i === 0 ? " theme-cal-dow-sun" : i === 6 ? " theme-cal-dow-sat" : "";
+        html += `<div class="theme-cal-dow-cell${cls}">${escapeHtml(ch)}</div>`;
+    });
+    html += `</div>`;
+
+    const BAR_H = 19;
+    const GAP = 3;
+    const MIN_LANES = 3;
+
+    weeks.forEach((weekDates) => {
+        const intervals = [];
+        segments.forEach((seg) => {
+            const cols = segmentWeekColumns(seg.start, seg.end, weekDates);
+            if (!cols) return;
+            intervals.push({ seg, startCol: cols.startCol, endCol: cols.endCol });
+        });
+        assignThemeCalTracks(intervals);
+        const maxTrack = intervals.length ? Math.max(...intervals.map((x) => x.track)) : 0;
+        const lanes = Math.max(MIN_LANES, maxTrack + 1);
+        const ganttH = lanes * (BAR_H + GAP) + GAP;
+
+        html += `<div class="theme-cal-week">`;
+        html += `<div class="theme-cal-week-days">`;
+        for (let c = 0; c < 7; c++) {
+            const dt = weekDates[c];
+            const inMonth = dt.getMonth() === m;
+            const iso = dateToIsoLocal(dt);
+            let cls = "theme-cal-day-cell";
+            if (!inMonth) cls += " theme-cal-day-outside";
+            if (iso === todayIso) cls += " theme-cal-day-today";
+            const dowIdx = dt.getDay();
+            if (dowIdx === 0) cls += " theme-cal-day-sun";
+            if (dowIdx === 6) cls += " theme-cal-day-sat";
+            html += `<div class="${cls}"><span class="theme-cal-day-num">${dt.getDate()}</span></div>`;
+        }
+        html += `</div>`;
+        html += `<div class="theme-cal-week-gantt" style="height:${ganttH}px">`;
+        intervals.forEach((inv) => {
+            const { seg, startCol, endCol, track } = inv;
+            const span = endCol - startCol + 1;
+            const leftPct = (startCol / 7) * 100;
+            const widthPct = (span / 7) * 100;
+            const top = GAP + track * (BAR_H + GAP);
+            const title = `${seg.label}（${formatDateJpFromISO(seg.start)}～${formatDateJpFromISO(seg.end)}）`;
+            html += `<div class="theme-cal-bar" style="left:${leftPct}%;width:${widthPct}%;top:${top}px;height:${BAR_H}px;background:${seg.color}" title="${escapeHtmlAttr(title)}">`;
+            html += `<span class="theme-cal-bar-label">${escapeHtml(seg.label)}</span>`;
+            html += `</div>`;
+        });
+        html += `</div></div>`;
+    });
+
+    host.innerHTML = html;
+}
+
+function openThemeCalendarModal() {
+    const modal = document.getElementById("themeCalendarModal");
+    if (!modal) return;
+    const now = new Date();
+    themeCalendarYear = now.getFullYear();
+    themeCalendarMonth = now.getMonth();
+    renderThemeCalendarInner();
+    modal.style.display = "flex";
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function closeThemeCalendarModal() {
+    const modal = document.getElementById("themeCalendarModal");
+    if (modal) {
+        modal.style.display = "none";
+        modal.setAttribute("aria-hidden", "true");
+    }
+}
+
+function themeCalendarPrevMonth() {
+    if (themeCalendarMonth == null) return;
+    themeCalendarMonth--;
+    if (themeCalendarMonth < 0) {
+        themeCalendarMonth = 11;
+        themeCalendarYear--;
+    }
+    renderThemeCalendarInner();
+}
+
+function themeCalendarNextMonth() {
+    if (themeCalendarMonth == null) return;
+    themeCalendarMonth++;
+    if (themeCalendarMonth > 11) {
+        themeCalendarMonth = 0;
+        themeCalendarYear++;
+    }
+    renderThemeCalendarInner();
+}
+
+function initThemeCalendarUi() {
+    const td = document.getElementById("todayDate");
+    if (td) {
+        td.style.cursor = "pointer";
+        td.onclick = (e) => {
+            e.preventDefault();
+            openThemeCalendarModal();
+        };
+        td.onkeydown = (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openThemeCalendarModal();
+            }
+        };
+    }
+    const prev = document.getElementById("themeCalPrevMonth");
+    const next = document.getElementById("themeCalNextMonth");
+    if (prev) prev.onclick = () => themeCalendarPrevMonth();
+    if (next) next.onclick = () => themeCalendarNextMonth();
 }
 
 // 【既存の修正】表示を更新するだけの役割にする
@@ -1848,6 +2072,33 @@ function toggleMonth(mIdx) {
     renderTimeline(); // 再描画
 }
 
+/** YYYY-MM-DD → 「2026年5月5日」 */
+function formatDateJpFromISO(iso) {
+    if (!iso || typeof iso !== "string") return "";
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return iso;
+    return `${m[1]}年${parseInt(m[2], 10)}月${parseInt(m[3], 10)}日`;
+}
+
+function showTimelineMarkerTooltip(kind, task, e) {
+    const tooltip = ensureTimelineTooltip();
+    const nameLine =
+        kind === "ms"
+            ? getFirstFlag(task) || "（展開イベント名なし）"
+            : getTargetName(task) || "（イベント名なし）";
+    const dateLine =
+        kind === "ms"
+            ? task.msDate
+                ? formatDateJpFromISO(task.msDate)
+                : "日程なし"
+            : getTargetDate(task)
+              ? formatDateJpFromISO(String(getTargetDate(task)))
+              : "日程なし";
+    tooltip.innerHTML = `<strong>${escapeHtml(nameLine)}</strong><br>${escapeHtml(dateLine)}`;
+    tooltip.style.display = "block";
+    moveTimelineTooltip(e);
+}
+
 /**
  * タイムライン描画エンジン (左ラベルと右バーの高さ完全同期版・4月始まり)
  */
@@ -2255,7 +2506,17 @@ function renderTimeline() {
             diamond.style.transform = 'translateX(-50%)';
             diamond.style.zIndex = '8';
             diamond.style.textShadow = '1px 1px 2px #000';
+            diamond.style.cursor = "default";
             diamond.setAttribute("data-help", "◇マイルストーン：展開（FirstFlag）に紐づく基準日を示します");
+            diamond.addEventListener("mouseenter", (evt) => {
+                if (!helpHoverOn) showTimelineMarkerTooltip("ms", task, evt);
+            });
+            diamond.addEventListener("mousemove", (evt) => {
+                if (!helpHoverOn) moveTimelineTooltip(evt);
+            });
+            diamond.addEventListener("mouseleave", () => {
+                if (!isDraggingNow) hideTimelineTooltip();
+            });
             rArea.appendChild(diamond);
         }
 
@@ -2274,7 +2535,17 @@ function renderTimeline() {
             star.style.transform = 'translateX(-50%)';
             star.style.zIndex = '9';
             star.style.textShadow = '0 0 3px #fff';
+            star.style.cursor = "default";
             star.setAttribute("data-help", "★ターゲット：イベント（Target）の目標日を示します");
+            star.addEventListener("mouseenter", (evt) => {
+                if (!helpHoverOn) showTimelineMarkerTooltip("tar", task, evt);
+            });
+            star.addEventListener("mousemove", (evt) => {
+                if (!helpHoverOn) moveTimelineTooltip(evt);
+            });
+            star.addEventListener("mouseleave", () => {
+                if (!isDraggingNow) hideTimelineTooltip();
+            });
             rArea.appendChild(star);
         }
 

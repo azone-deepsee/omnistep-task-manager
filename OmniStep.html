@@ -117,7 +117,8 @@
             <input type="file" id="templateInput" style="display:none" accept=".csv" onchange="importTemplate(event)">
             <button class="btn-sub" type="button" onclick="openYearlyMaster()"
                 data-help="年間日程：マスターイベント（展開・Targetの候補）を編集する画面を開きます">📅 年間日程</button>
-            <div id="todayDate" class="today-date" data-help="今日の日付：現在日付の表示です"></div>
+            <div id="todayDate" class="today-date" role="button" tabindex="0"
+                data-help="今日の日付：クリックでテーマ期間カレンダー（月間の重なり俯瞰）を開きます"></div>
             <button class="theme-toggle-btn" type="button" id="themeToggleBtn" onclick="toggleDarkMode()"
                 aria-label="ダークモードの切替">🌙</button>
             <button class="help-hover-toggle" type="button" id="helpHoverToggleBtn" onclick="toggleHelpHover()"
@@ -396,6 +397,29 @@
                 <button class="btn-sub" type="button" onclick="closeSettingsModal()"
                     data-help="キャンセル：設定を保存せず閉じます">キャンセル</button>
                 <button class="btn-add" type="button" onclick="saveSettings()" data-help="保存：設定内容を保存して反映します">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="themeCalendarModal" class="modal theme-calendar-modal" style="display:none;" role="dialog"
+        aria-modal="true" aria-labelledby="themeCalendarModalTitle" aria-hidden="true"
+        onclick="if (event.target === this) closeThemeCalendarModal()">
+        <div class="modal-content theme-calendar-modal-content" onclick="event.stopPropagation()">
+            <div class="theme-calendar-modal-header">
+                <h3 id="themeCalendarModalTitle" style="margin:0;">テーマ期間カレンダー</h3>
+                <div class="theme-calendar-modal-nav">
+                    <button type="button" class="btn-sub" id="themeCalPrevMonth" aria-label="前月"
+                        data-help="前月：カレンダーの表示月を戻します">◀</button>
+                    <span id="themeCalMonthLabel" class="theme-cal-month-label"></span>
+                    <button type="button" class="btn-sub" id="themeCalNextMonth" aria-label="翌月"
+                        data-help="翌月：カレンダーの表示月を進めます">▶</button>
+                    <button type="button" class="btn-sub" onclick="closeThemeCalendarModal()"
+                        data-help="閉じる：カレンダーを閉じます">閉じる</button>
+                </div>
+            </div>
+            <p class="theme-calendar-hint">閲覧専用です。</p>
+            <div id="themeCalendarScroll" class="theme-calendar-scroll">
+                <div id="themeCalendarGrid"></div>
             </div>
         </div>
     </div>
