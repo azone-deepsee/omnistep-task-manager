@@ -1145,23 +1145,94 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     opacity: 0.85;
 }
 
-/* タスクリスト：業務内容セル（右端に依存フラグ） */
-.issue-cell-inner {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+/* タスクリスト：業務内容列（親＝上段コメント／下段ボタン、子＝1行＋右チェック、省略はホバーで全文） */
+.td-issue-col {
+    overflow: hidden;
+    /* 同一行の他列が高いとき、業務内容を上下中央にすると「縦に余白が空いた改行」に見える */
+    vertical-align: top;
+    box-sizing: border-box;
 }
 
-.issue-text {
-    flex: 1;
+.issue-cell-inner--parent {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
     min-width: 0;
-    word-break: break-all;
+}
+
+.issue-text-row {
+    min-width: 0;
+}
+
+.issue-actions-row {
+    min-width: 0;
+}
+
+.issue-actions-row:empty {
+    display: none;
+}
+
+/* grid：狭くても「本文 | チェック」の2列に固定（flex の折返しより安定） */
+.issue-cell-inner--child {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+.issue-text-parent,
+.issue-text-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+    display: block;
+    box-sizing: border-box;
+}
+
+.issue-text-parent {
+    width: 100%;
+}
+
+.issue-text-child {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.issue-text-parent:focus {
+    white-space: normal;
+    overflow: auto;
+    text-overflow: clip;
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.45);
+    border-radius: 2px;
+    max-height: 6.5em;
+}
+
+/* 子は常に1行：フォーカス中も改行させず横スクロールで編集 */
+.issue-text-child:focus {
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    text-overflow: clip;
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.45);
+    border-radius: 2px;
+    max-height: none;
+    scrollbar-width: thin;
 }
 
 .dep-flag-input {
     flex: 0 0 auto;
+    align-self: center;
     cursor: pointer;
-    transform: scale(1.1);
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    flex-shrink: 0;
 }
 
 /* 親タスク：連携一括ボタン */
@@ -1248,11 +1319,16 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
 }
 
 .parent-issue-controls {
-    flex: 0 0 auto;
-    display: inline-flex;
+    display: flex;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 6px;
-    margin-left: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
 }
 
 .order-controls {
@@ -1550,7 +1626,7 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     word-break: break-word;
 }
 
-/* 親テーマ名が枠から省略されているときの全文ホバー（ヘルプとは別） */
+/* 親テーマ名・業務内容が枠から省略されているときの全文ホバー（ヘルプとは別） */
 .theme-overflow-tooltip {
     position: fixed;
     z-index: 100023;
@@ -1926,7 +2002,7 @@ html[data-theme="dark"] .timeline-bar.timeline-expired {
 }
 
 /* =============================================================================
-   タブレット〜中幅（iPad 等）：一覧テーブルの「業務内容」列が潰れる・行が縦に伸びすぎる対策
+   狭いビューポート（max-width:1100px）：余白・サブ画面向け。一覧は横スクロール＋段増え抑制
    ============================================================================= */
 
 .task-list {
@@ -1938,9 +2014,17 @@ html[data-theme="dark"] .timeline-bar.timeline-expired {
 }
 
 /* table-layout:fixed のとき可変列が 0 幅に落ちるのを防ぐ（横スクロールで全体を見られる） */
+/* 業務内容列の最小幅（親行のボタン帯）を含めた概算 */
 #taskTable {
-    min-width: 1040px;
-    width: max(100%, 1040px);
+    min-width: 1240px;
+    width: max(100%, 1240px);
+}
+
+/* グローバル th,td の固定 height が効くと複数行セルが潰れる／flex+省略が不安定になる */
+#taskTable thead th,
+#taskTable tbody td {
+    height: auto;
+    min-height: var(--row-height);
 }
 
 /* FirstFlag / TargetFlag：期間列（7列目）と同じ 110px に固定 */
@@ -1964,12 +2048,18 @@ html[data-theme="dark"] .timeline-bar.timeline-expired {
 
 #taskTable th:nth-child(6),
 #taskTable td:nth-child(6) {
-    min-width: 200px;
-    width: 22%;
+    /* A案：親行の「＋子」「期間リセット」「連携一括」等が列からはみ出しにくい幅 */
+    min-width: 320px;
+    width: 26%;
     max-width: none;
 }
 
-@media (max-width: 1280px) {
+#taskTable td.td-issue-col {
+    vertical-align: top;
+}
+
+/* 1280 だと FHD の半分ウィンドウや余白で「狭い」と判定されやすい → 実際に詰まる幅だけ適用 */
+@media (max-width: 1100px) {
     body {
         padding: 10px 12px;
     }
@@ -2043,38 +2133,22 @@ html[data-theme="dark"] .timeline-bar.timeline-expired {
         box-sizing: border-box;
     }
 
-    /* 1行省略で本文が消えないよう、業務内容列だけは折り返し表示 */
-    #taskTable td:nth-child(6) {
-        overflow: visible;
-        text-overflow: clip;
-        white-space: normal;
+    #taskTable td.td-issue-col {
+        overflow: hidden;
+        vertical-align: top;
     }
 
-    .issue-cell-inner {
-        flex-wrap: wrap;
-        align-items: flex-start;
-        gap: 6px;
-    }
-
-    .issue-text {
-        flex: 1 1 100%;
-        min-width: 0;
-        word-break: break-word;
-    }
-
-    .parent-issue-controls {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
-    }
-
+    /* wrap+100% だと theme-main が全幅を取り ▲▼ が必ず次段になる。1段のまま横スクロール */
     .theme-cell {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        min-width: 0;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
     }
 
     .theme-cell-main {
-        flex: 1 1 100%;
+        flex: 1 1 auto;
         min-width: 0;
     }
 

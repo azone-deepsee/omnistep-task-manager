@@ -133,6 +133,11 @@ function onDocumentMouseMoveHelpHover(e) {
         hideHelpHoverTooltip();
         return;
     }
+    const truncIssue = e.target.closest(".issue-text--ellipsis-tip");
+    if (truncIssue && truncIssue.scrollWidth > truncIssue.clientWidth + 1) {
+        hideHelpHoverTooltip();
+        return;
+    }
     if (!helpHoverOn) return;
     let t = e.target.closest("[data-help]");
     if (!t) {
@@ -193,18 +198,29 @@ function showThemeOverflowTooltip(text, clientX, clientY) {
     el.style.top = `${Math.max(6, y)}px`;
 }
 
-/** 親テーマ名が省略されているときだけ全文を表示（ヘルプとは別要素） */
+/** 一覧で省略表示中の要素（親テーマ名・業務内容）の全文ホバー（ヘルプとは別要素） */
+function findListViewEllipsisOverflowTarget(e, listView) {
+    let el = e.target.closest(".theme-name.theme-name-parent");
+    if (!el) {
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        if (under && listView.contains(under)) el = under.closest(".theme-name.theme-name-parent");
+    }
+    if (el) return el;
+    el = e.target.closest(".issue-text--ellipsis-tip");
+    if (!el) {
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        if (under && listView.contains(under)) el = under.closest(".issue-text--ellipsis-tip");
+    }
+    return el || null;
+}
+
 function onDocumentMouseMoveThemeOverflow(e) {
     const listView = document.getElementById("listView");
     if (!listView || listView.style.display === "none" || !listView.contains(e.target)) {
         hideThemeOverflowTooltip();
         return;
     }
-    let nameEl = e.target.closest(".theme-name.theme-name-parent");
-    if (!nameEl) {
-        const under = document.elementFromPoint(e.clientX, e.clientY);
-        if (under && listView.contains(under)) nameEl = under.closest(".theme-name.theme-name-parent");
-    }
+    const nameEl = findListViewEllipsisOverflowTarget(e, listView);
     if (!nameEl || !document.body.contains(nameEl)) {
         hideThemeOverflowTooltip();
         return;
@@ -1707,14 +1723,24 @@ function renderAll() {
         const parentControlsHtml = (isParent && !isLocked)
             ? `<span class="parent-issue-controls">${addChildBtn}${periodResetBtn}${parentDepToggleHtml}</span>`
             : "";
-        const col6 = `<td style="word-break:break-all;">
-            <div class="issue-cell-inner">
-                <span class="issue-text" contenteditable="${!isLocked}"
+        const issueHelp = helpAttr(
+            "業務内容：親は上段がメモ・下段が操作。子は1行で編集。はみ出しは省略し、ホバーで全文を表示します（テーマ列と同様）"
+        );
+        const issueTextSpan = `<span class="issue-text issue-text--ellipsis-tip${
+            isParent ? " issue-text-parent" : " issue-text-child"
+        }" contenteditable="${!isLocked}"
                       oninput="updateDataSilent(${task.id}, 'SecondaryStep', this.innerText)"
-                      onblur="renderAll()"${helpAttr('業務内容：子タスクの具体的な作業内容を編集します（親行ではボタン類が並びます）')}>${getSecondaryStep(task)}</span>
-                ${(!isParent ? depCheckboxHtml : "") || parentControlsHtml}
-            </div>
-        </td>`;
+                      onblur="renderAll()"${issueHelp}>${getSecondaryStep(task)}</span>`;
+        const col6Inner = isParent
+            ? `<div class="issue-cell-inner issue-cell-inner--parent">
+                <div class="issue-text-row">${issueTextSpan}</div>
+                <div class="issue-actions-row">${parentControlsHtml}</div>
+            </div>`
+            : `<div class="issue-cell-inner issue-cell-inner--child">
+                ${issueTextSpan}
+                ${depCheckboxHtml}
+            </div>`;
+        const col6 = `<td class="td-issue-col">${col6Inner}</td>`;
 
         const col7Help = isParent
             ? "期間：上が着手・下が納期。親の着手と納期がどちらも空のときに着手を入れると、子へ1日ずつ連番で入ります（クリックで日付変更）"
