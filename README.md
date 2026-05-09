@@ -104,7 +104,40 @@ git push
 | `index.html` | Pages のトップ用。`OmniStep.html` へリダイレクト |
 | `.nojekyll` | Jekyll を無効化（将来 `_` で始まるファイルを置いても壊れにくい） |
 | `.gitignore` | 不要なファイルを push 対象から外す |
-| `OShtml.txt` など | バックアップ用テキスト。公開したくなければ `.gitignore` に追加 |
+| `OShtml.txt` など | バックアップ用。**`.gitignore` で `*.txt` として除外**（ローカルには残る） |
+
+---
+
+## すでに push したあとで、`.txt` や `制作工程.csv` をリポジトリから外す
+
+**一度コミット／push に含めてしまった場合**、次のように **Git の管理対象からだけ外します**（フォルダ内の実ファイルは消えません）。
+
+プロジェクトのフォルダで PowerShell を開き、**1行ずつ**実行します。
+
+```powershell
+cd "c:\Users\fd3sr\OneDrive\デスクトップ\タスク管理ツール20260429CLver"
+```
+
+```powershell
+git rm --cached OShtml.txt OSjs.txt OScss.txt
+```
+
+```powershell
+git rm --cached "制作工程.csv"
+```
+
+（他にも `.txt` を追加していた場合は、ファイル名を足すか、`git rm --cached *.txt` でまとめて外せます。）
+
+そのあとコミットして push します。
+
+```powershell
+git add .gitignore
+git commit -m "Remove backup txt and CSV from repo; update gitignore"
+git push
+```
+
+これで **GitHub 上の最新のツリーからは消えます**。  
+**まだ一度も push していない**場合は、`.gitignore` に書いてあるだけで次回の `git add` から自動的に除外されるので、`git rm --cached` は不要です。
 
 ---
 

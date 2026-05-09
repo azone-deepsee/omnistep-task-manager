@@ -19,6 +19,41 @@ function clearDependencyLines() {
     }
 }
 
+// タイムライン：表示範囲（今日の月から N か月）
+const LS_PBPM_TL_MONTH_RANGE = "pbpm_timeline_month_range";
+let timelineMonthRange = (() => {
+    const n = parseInt(localStorage.getItem(LS_PBPM_TL_MONTH_RANGE) || "12", 10);
+    return [3, 6, 9, 12].includes(n) ? n : 12;
+})();
+let forcedCollapsedMonths = new Set(); // renderTimeline が再計算
+
+function syncTimelineRangeButtons() {
+    const group = document.querySelector(".timeline-range-group");
+    if (!group) return;
+    group.querySelectorAll(".range-btn").forEach((b) => {
+        const m = parseInt(b.getAttribute("data-months") || "", 10);
+        b.classList.toggle("is-active", m === timelineMonthRange);
+    });
+}
+
+function setTimelineMonthRange(months) {
+    const n = Number(months);
+    if (![3, 6, 9, 12].includes(n)) return;
+    timelineMonthRange = n;
+    try {
+        localStorage.setItem(LS_PBPM_TL_MONTH_RANGE, String(n));
+    } catch {
+        /* ignore */
+    }
+    syncTimelineRangeButtons();
+    const timeEl = document.getElementById("timelineView");
+    if (timeEl && timeEl.style.display !== "none") renderTimeline();
+}
+
+/** CSS :root の --accordion-row-duration-in / -out（秒）に合わせる。+25ms でアニメ終了後に再描画 */
+const ACCORDION_ROW_ANIM_IN_MS = Math.round(0.3 * 1000) + 25;
+const ACCORDION_ROW_ANIM_OUT_MS = Math.round(0.35 * 1000) + 25;
+
 const statusList = ["未着手", "調査中", "進行中", "修正中", "完了"];
 
 /** 枠1～6が空欄のときに使う既定名（従来の6カテゴリ） */
@@ -93,6 +128,16 @@ function showHelpHoverTooltip(text, clientX, clientY) {
 }
 
 function onDocumentMouseMoveHelpHover(e) {
+    const truncTheme = e.target.closest(".theme-name.theme-name-parent");
+    if (truncTheme && truncTheme.scrollWidth > truncTheme.clientWidth + 1) {
+        hideHelpHoverTooltip();
+        return;
+    }
+    const truncIssue = e.target.closest(".issue-text--ellipsis-tip");
+    if (truncIssue && truncIssue.scrollWidth > truncIssue.clientWidth + 1) {
+        hideHelpHoverTooltip();
+        return;
+    }
     if (!helpHoverOn) return;
     let t = e.target.closest("[data-help]");
     if (!t) {
@@ -111,13 +156,91 @@ function onDocumentMouseMoveHelpHover(e) {
     showHelpHoverTooltip(dh, e.clientX, e.clientY);
 }
 
+let themeOverflowTooltipEl = null;
+let themeOverflowMoveBound = false;
+
+function hideThemeOverflowTooltip() {
+    if (!themeOverflowTooltipEl) return;
+    themeOverflowTooltipEl.style.display = "none";
+    themeOverflowTooltipEl.setAttribute("aria-hidden", "true");
+}
+
+function ensureThemeOverflowTooltipEl() {
+    if (!themeOverflowTooltipEl) {
+        themeOverflowTooltipEl = document.getElementById("theme-overflow-tooltip");
+        if (!themeOverflowTooltipEl) {
+            themeOverflowTooltipEl = document.createElement("div");
+            themeOverflowTooltipEl.id = "theme-overflow-tooltip";
+            themeOverflowTooltipEl.className = "theme-overflow-tooltip";
+            themeOverflowTooltipEl.setAttribute("role", "tooltip");
+            themeOverflowTooltipEl.setAttribute("aria-hidden", "true");
+            document.body.appendChild(themeOverflowTooltipEl);
+        }
+    }
+    return themeOverflowTooltipEl;
+}
+
+function showThemeOverflowTooltip(text, clientX, clientY) {
+    const el = ensureThemeOverflowTooltipEl();
+    el.textContent = text;
+    el.style.display = "block";
+    el.setAttribute("aria-hidden", "false");
+    const offX = 14;
+    const offY = 20;
+    let x = clientX + offX;
+    let y = clientY + offY;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    const rect = el.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 6) x = window.innerWidth - rect.width - 6;
+    if (rect.bottom > window.innerHeight - 6) y = clientY - rect.height - 8;
+    el.style.left = `${Math.max(6, x)}px`;
+    el.style.top = `${Math.max(6, y)}px`;
+}
+
+/** 一覧で省略表示中の要素（親テーマ名・業務内容）の全文ホバー（ヘルプとは別要素） */
+function findListViewEllipsisOverflowTarget(e, listView) {
+    let el = e.target.closest(".theme-name.theme-name-parent");
+    if (!el) {
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        if (under && listView.contains(under)) el = under.closest(".theme-name.theme-name-parent");
+    }
+    if (el) return el;
+    el = e.target.closest(".issue-text--ellipsis-tip");
+    if (!el) {
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        if (under && listView.contains(under)) el = under.closest(".issue-text--ellipsis-tip");
+    }
+    return el || null;
+}
+
+function onDocumentMouseMoveThemeOverflow(e) {
+    const listView = document.getElementById("listView");
+    if (!listView || listView.style.display === "none" || !listView.contains(e.target)) {
+        hideThemeOverflowTooltip();
+        return;
+    }
+    const nameEl = findListViewEllipsisOverflowTarget(e, listView);
+    if (!nameEl || !document.body.contains(nameEl)) {
+        hideThemeOverflowTooltip();
+        return;
+    }
+    if (nameEl.scrollWidth <= nameEl.clientWidth + 1) {
+        hideThemeOverflowTooltip();
+        return;
+    }
+    showThemeOverflowTooltip(nameEl.innerText.trim(), e.clientX, e.clientY);
+}
+
 function bindHelpHoverListeners() {
     if (helpHoverMoveBound) return;
+    document.addEventListener("mousemove", onDocumentMouseMoveThemeOverflow, true);
     document.addEventListener("mousemove", onDocumentMouseMoveHelpHover, true);
     window.addEventListener(
         "scroll",
         () => {
             if (helpHoverOn) hideHelpHoverTooltip();
+            hideThemeOverflowTooltip();
         },
         true
     );
@@ -141,6 +264,7 @@ function toggleHelpHover() {
         /* ignore */
     }
     if (!helpHoverOn) hideHelpHoverTooltip();
+    hideThemeOverflowTooltip();
     applyHelpHoverToDocument();
     showToast(helpHoverOn ? "ヘルプ表示：ON（各所にホバーで説明）" : "ヘルプ表示：OFF");
 }
@@ -285,6 +409,32 @@ function maxDateStr(a, b) {
     return a > b ? a : b; // "YYYY-MM-DD" なので辞書順比較でOK
 }
 
+function isIsoDateInOwnPeriod(task, iso) {
+    if (!task || !iso) return true;
+    const s = task.startDate || "";
+    const e = task.deadline || "";
+    if (s && iso < s) return false;
+    if (e && iso > e) return false;
+    return true;
+}
+
+function warnIfMarkersOutsideOwnPeriod(task) {
+    if (!task || isParentTask(task)) return;
+    const s = task.startDate || "";
+    const e = task.deadline || "";
+    if (!s && !e) return;
+    const ms = task.msDate || "";
+    const tar = String(getTargetDate(task) || "");
+    const outMs = ms && !isIsoDateInOwnPeriod(task, ms);
+    const outTar = tar && /^\d{4}-\d{2}-\d{2}$/.test(tar) && !isIsoDateInOwnPeriod(task, tar);
+    if (outMs || outTar) {
+        const parts = [];
+        if (outMs) parts.push("◇");
+        if (outTar) parts.push("★");
+        showToast(`${parts.join("・")} が期間外です（期間内に調整してください）`);
+    }
+}
+
 function syncFamilyCategory(familyKey, category) {
     let changed = false;
     tasks.forEach(t => {
@@ -334,6 +484,33 @@ function getDependencyPrevDeadlineMin(task) {
     if (!task || !task.fFlag) return "";
     const prev = getPrevChildTask(task);
     return prev?.deadline || "";
+}
+
+function canEnableDependencyForChild(task) {
+    if (!task || isParentTask(task) || isExternalTask(task) || task.archived || task.status === "完了") return false;
+    if (getTaskBranchNo(task) === "010") return false;
+    // 既に期間が入っている場合のみ、矛盾チェックでONを拒否
+    const prevDeadline = getPrevChildTask(task)?.deadline || "";
+    if (prevDeadline && task.startDate && prevDeadline > task.startDate) return false;
+    return true;
+}
+
+function getMarkersMinMaxDate(task) {
+    if (!task) return { min: null, max: null };
+    const dates = [];
+    const ms = task.msDate ? new Date(task.msDate) : null;
+    if (ms && !isNaN(ms)) dates.push(ms);
+    const tarIso = String(getTargetDate(task) || "");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tarIso)) {
+        const td = new Date(tarIso);
+        if (!isNaN(td)) dates.push(td);
+    }
+    if (dates.length === 0) return { min: null, max: null };
+    const min = new Date(Math.min(...dates.map(d => d.getTime())));
+    const max = new Date(Math.max(...dates.map(d => d.getTime())));
+    min.setHours(0, 0, 0, 0);
+    max.setHours(0, 0, 0, 0);
+    return { min, max };
 }
 
 function addDaysToDateStr(dateStr, days) {
@@ -602,18 +779,27 @@ function toggleFamilyDependency(parentTaskId, checked) {
     if (!parent || !isParentTask(parent) || parent.archived) return;
     if (parent.status === "完了") return;
     const familyKey = getTaskFamilyKey(parent);
+    let blocked = 0;
     tasks.forEach(t => {
         if (t.archived) return;
         if (getTaskFamilyKey(t) !== familyKey) return;
         if (isParentTask(t)) return;
         if (getTaskBranchNo(t) === "010") return; // 最初の子は対象外
         if (t.status === "完了") return; // 完了はロック
+        if (!!checked && t.startDate && !canEnableDependencyForChild(t)) {
+            blocked++;
+            return;
+        }
         t.fFlag = !!checked;
     });
     save();
     renderAll();
     if (typeof renderTimeline === 'function') renderTimeline();
-    showToast(checked ? "このテーマの連携を一括ONにしました" : "このテーマの連携を一括OFFにしました");
+    if (checked && blocked > 0) {
+        showToast(`連携を一括ON：${blocked}件は期間が条件を満たさずONにできませんでした`);
+    } else {
+        showToast(checked ? "このテーマの連携を一括ONにしました" : "このテーマの連携を一括OFFにしました");
+    }
 }
 
 function toggleFamilyDependencyByButton(parentTaskId) {
@@ -683,9 +869,11 @@ function migrateTaskFieldsIfNeeded() {
 
 function formatDateCodePart(dateObj = new Date()) {
     const yy = String(dateObj.getFullYear()).slice(-2);
-    const mm = String(dateObj.getMonth() + 1);
     const dd = String(dateObj.getDate()).padStart(2, "0");
-    return `${yy}D${mm}${dd}`;
+    // 月は 1-12 を A-L に変換（例：2026/05/09 → 26E09）
+    const monthLetters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+    const mon = monthLetters[Math.max(0, Math.min(11, dateObj.getMonth()))];
+    return `${yy}${mon}${dd}`;
 }
 
 function generateParentTaskCode() {
@@ -805,11 +993,16 @@ window.onload = () => {
     applyHelpHoverToDocument();
     bindHelpHoverListeners();
     applyPbpmTheme();
+    syncTimelineRangeButtons();
+    // 初期表示はリストなので範囲ボタンは隠す
+    const rangeGroup = document.querySelector('.timeline-range-group');
+    if (rangeGroup) rangeGroup.style.display = 'none';
     ensureDependencyFieldsIfNeeded();
     migrateTaskFieldsIfNeeded();
     migrateTaskCodesIfNeeded();
     ensureFamilyCategoriesSyncedIfNeeded();
     displayToday();
+    initThemeCalendarUi();
     updateTitleDisplay(); // タイトルを表示
     renderTabs();
     renderAll();
@@ -854,6 +1047,244 @@ function displayToday() {
     const w = ["日", "月", "火", "水", "木", "金", "土"][now.getDay()];
     const dateElement = document.getElementById('todayDate');
     if (dateElement) dateElement.innerText = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日(${w})`;
+}
+
+function updateBodyScrollLock() {
+    // どれか1つでもモーダル/オーバーレイが開いていたら背面スクロールを止める
+    const overlays = Array.from(document.querySelectorAll(".modal, .modal-overlay"));
+    const anyOpen = overlays.some((el) => {
+        if (!el || !document.body.contains(el)) return false;
+        const disp = (el.style && el.style.display) ? el.style.display : "";
+        if (disp && disp !== "none") return true;
+        const cs = window.getComputedStyle(el);
+        return cs && cs.display !== "none" && cs.visibility !== "hidden" && cs.opacity !== "0";
+    });
+    document.body.classList.toggle("no-scroll", anyOpen);
+}
+
+function dateToIsoLocal(d) {
+    if (!d || isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    return `${y}-${mo}-${da}`;
+}
+
+const THEME_CAL_BAR_COLORS = ["#4285f4", "#0f9d58", "#ab47bc", "#e8710a", "#00838f"];
+
+let themeCalendarYear = null;
+let themeCalendarMonth = null;
+
+function getThemeCalendarSegments() {
+    const pool = tasks.concat(externalTasks || []).filter((t) => !t.archived);
+    const parents = pool.filter((t) => isParentTask(t));
+    const segs = [];
+    let colorIdx = 0;
+    parents.forEach((parent) => {
+        const fk = getTaskFamilyKey(parent);
+        let s = parent.startDate || "";
+        let e = parent.deadline || "";
+        if (!s || !e) {
+            const kids = pool.filter((t) => getTaskFamilyKey(t) === fk && !isParentTask(t));
+            if (kids.length) {
+                const ss = kids.map((k) => k.startDate).filter(Boolean);
+                const ee = kids.map((k) => k.deadline).filter(Boolean);
+                if (!s && ss.length) s = ss.reduce((a, b) => (a < b ? a : b));
+                if (!e && ee.length) e = ee.reduce((a, b) => (a > b ? a : b));
+            }
+        }
+        if (!s || !e) return;
+        if (s > e) {
+            const x = s;
+            s = e;
+            e = x;
+        }
+        const isExt = isExternalTask(parent);
+        segs.push({
+            label: getThemeLabel(parent),
+            start: s,
+            end: e,
+            isExt,
+            color: isExt ? "#5c6bc0" : THEME_CAL_BAR_COLORS[colorIdx++ % THEME_CAL_BAR_COLORS.length],
+        });
+    });
+    return segs;
+}
+
+function getCalendarWeekDates(year, month0) {
+    const first = new Date(year, month0, 1);
+    const pad = first.getDay();
+    const start = new Date(year, month0, 1 - pad);
+    const weeks = [];
+    const cur = new Date(start);
+    for (let w = 0; w < 6; w++) {
+        const row = [];
+        for (let i = 0; i < 7; i++) {
+            row.push(new Date(cur.getFullYear(), cur.getMonth(), cur.getDate()));
+            cur.setDate(cur.getDate() + 1);
+        }
+        weeks.push(row);
+    }
+    return weeks;
+}
+
+function segmentWeekColumns(segStart, segEnd, weekDates) {
+    let minC = -1;
+    let maxC = -1;
+    for (let c = 0; c < 7; c++) {
+        const iso = dateToIsoLocal(weekDates[c]);
+        if (iso >= segStart && iso <= segEnd) {
+            if (minC === -1) minC = c;
+            maxC = c;
+        }
+    }
+    if (minC === -1) return null;
+    return { startCol: minC, endCol: maxC };
+}
+
+function assignThemeCalTracks(intervals) {
+    intervals.sort((a, b) => a.startCol - b.startCol || a.endCol - b.endCol);
+    const lastEndOnTrack = [];
+    intervals.forEach((inv) => {
+        let t = 0;
+        while (lastEndOnTrack[t] !== undefined && lastEndOnTrack[t] >= inv.startCol) t++;
+        lastEndOnTrack[t] = inv.endCol;
+        inv.track = t;
+    });
+}
+
+function renderThemeCalendarInner() {
+    const host = document.getElementById("themeCalendarGrid");
+    const labelEl = document.getElementById("themeCalMonthLabel");
+    if (!host || !labelEl || themeCalendarYear == null) return;
+
+    const y = themeCalendarYear;
+    const m = themeCalendarMonth;
+    labelEl.textContent = `${y}年 ${m + 1}月`;
+
+    const segments = getThemeCalendarSegments();
+    const weeks = getCalendarWeekDates(y, m);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayIso = dateToIsoLocal(today);
+
+    const dow = ["日", "月", "火", "水", "木", "金", "土"];
+    let html = `<div class="theme-cal-dow-row">`;
+    dow.forEach((ch, i) => {
+        const cls = i === 0 ? " theme-cal-dow-sun" : i === 6 ? " theme-cal-dow-sat" : "";
+        html += `<div class="theme-cal-dow-cell${cls}">${escapeHtml(ch)}</div>`;
+    });
+    html += `</div>`;
+
+    const BAR_H = 19;
+    const GAP = 3;
+    const MIN_LANES = 3;
+
+    weeks.forEach((weekDates) => {
+        const intervals = [];
+        segments.forEach((seg) => {
+            const cols = segmentWeekColumns(seg.start, seg.end, weekDates);
+            if (!cols) return;
+            intervals.push({ seg, startCol: cols.startCol, endCol: cols.endCol });
+        });
+        assignThemeCalTracks(intervals);
+        const maxTrack = intervals.length ? Math.max(...intervals.map((x) => x.track)) : 0;
+        const lanes = Math.max(MIN_LANES, maxTrack + 1);
+        const ganttH = lanes * (BAR_H + GAP) + GAP;
+
+        html += `<div class="theme-cal-week">`;
+        html += `<div class="theme-cal-week-days">`;
+        for (let c = 0; c < 7; c++) {
+            const dt = weekDates[c];
+            const inMonth = dt.getMonth() === m;
+            const iso = dateToIsoLocal(dt);
+            let cls = "theme-cal-day-cell";
+            if (!inMonth) cls += " theme-cal-day-outside";
+            if (iso === todayIso) cls += " theme-cal-day-today";
+            const dowIdx = dt.getDay();
+            if (dowIdx === 0) cls += " theme-cal-day-sun";
+            if (dowIdx === 6) cls += " theme-cal-day-sat";
+            html += `<div class="${cls}"><span class="theme-cal-day-num">${dt.getDate()}</span></div>`;
+        }
+        html += `</div>`;
+        html += `<div class="theme-cal-week-gantt" style="height:${ganttH}px">`;
+        intervals.forEach((inv) => {
+            const { seg, startCol, endCol, track } = inv;
+            const span = endCol - startCol + 1;
+            const leftPct = (startCol / 7) * 100;
+            const widthPct = (span / 7) * 100;
+            const top = GAP + track * (BAR_H + GAP);
+            const title = `${seg.label}（${formatDateJpFromISO(seg.start)}～${formatDateJpFromISO(seg.end)}）`;
+            html += `<div class="theme-cal-bar" style="left:${leftPct}%;width:${widthPct}%;top:${top}px;height:${BAR_H}px;background:${seg.color}" title="${escapeHtmlAttr(title)}">`;
+            html += `<span class="theme-cal-bar-label">${escapeHtml(seg.label)}</span>`;
+            html += `</div>`;
+        });
+        html += `</div></div>`;
+    });
+
+    host.innerHTML = html;
+}
+
+function openThemeCalendarModal() {
+    const modal = document.getElementById("themeCalendarModal");
+    if (!modal) return;
+    const now = new Date();
+    themeCalendarYear = now.getFullYear();
+    themeCalendarMonth = now.getMonth();
+    renderThemeCalendarInner();
+    modal.style.display = "flex";
+    modal.setAttribute("aria-hidden", "false");
+    updateBodyScrollLock();
+}
+
+function closeThemeCalendarModal() {
+    const modal = document.getElementById("themeCalendarModal");
+    if (modal) {
+        modal.style.display = "none";
+        modal.setAttribute("aria-hidden", "true");
+    }
+    updateBodyScrollLock();
+}
+
+function themeCalendarPrevMonth() {
+    if (themeCalendarMonth == null) return;
+    themeCalendarMonth--;
+    if (themeCalendarMonth < 0) {
+        themeCalendarMonth = 11;
+        themeCalendarYear--;
+    }
+    renderThemeCalendarInner();
+}
+
+function themeCalendarNextMonth() {
+    if (themeCalendarMonth == null) return;
+    themeCalendarMonth++;
+    if (themeCalendarMonth > 11) {
+        themeCalendarMonth = 0;
+        themeCalendarYear++;
+    }
+    renderThemeCalendarInner();
+}
+
+function initThemeCalendarUi() {
+    const td = document.getElementById("todayDate");
+    if (td) {
+        td.style.cursor = "pointer";
+        td.onclick = (e) => {
+            e.preventDefault();
+            openThemeCalendarModal();
+        };
+        td.onkeydown = (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openThemeCalendarModal();
+            }
+        };
+    }
+    const prev = document.getElementById("themeCalPrevMonth");
+    const next = document.getElementById("themeCalNextMonth");
+    if (prev) prev.onclick = () => themeCalendarPrevMonth();
+    if (next) next.onclick = () => themeCalendarNextMonth();
 }
 
 // 【既存の修正】表示を更新するだけの役割にする
@@ -1142,11 +1573,13 @@ function openSettingsModal() {
         if (radio) radio.checked = val === lt;
     });
     modal.style.display = 'flex';
+    updateBodyScrollLock();
 }
 
 function closeSettingsModal() {
     const modal = document.getElementById('settingsModal');
     if (modal) modal.style.display = 'none';
+    updateBodyScrollLock();
 }
 
 /** 担当者IDが実質未設定か（空・未保存・0のみなど） */
@@ -1207,9 +1640,13 @@ const TUTORIAL_SECTIONS = [
         title: "12. 別のIDで作成したCSVについて",
         html: "<p>CSVに含まれるOwnerIDが、設定で保存した自分のIDと一致しない場合、アプリはそのデータを<strong>外部CSV</strong>として閲覧専用で表示します。本体の保存データには混ぜず、ロック表示のまま参照できます。不要になったら<strong>外部表示をクリア</strong>で表示だけ消せます。</p>",
     },
+    {
+        title: "13. 保存先について",
+        html: "<p>タスク・マスター・設定（担当者ID・表題・カテゴリ・配色など）は、すべて<strong>お使いのブラウザ内の localStorage（ローカル保存）</strong>に記録されます。<strong>GitHub Pages のサーバーには保存されません</strong>。別のPC・別ブラウザ・シークレットウィンドウでは共有されず、ブラウザのデータ削除やプロファイル削除で<strong>消える可能性</strong>があります。</p><p>大切なデータは<strong>CSV出力</strong>や<strong>テンプレート保存</strong>で定期的にファイルとしてバックアップしてください。GitHub に上がっているのは<strong>アプリのプログラム（HTML/CSS/JS）だけ</strong>で、あなたの業務データ本体は含まれません。</p>",
+    },
 ];
 
-const TUTORIAL_SECTIONS_DOM_VER = "2";
+const TUTORIAL_SECTIONS_DOM_VER = "3";
 
 function ensureTutorialSectionsRendered() {
     const container = document.getElementById("tutorialSections");
@@ -1261,6 +1698,7 @@ function openTutorialModal(asWelcome) {
     if (!m) return;
     m.style.display = "flex";
     m.classList.toggle("tutorial-modal--welcome", !!asWelcome);
+    updateBodyScrollLock();
 }
 
 function closeTutorialModal() {
@@ -1269,6 +1707,7 @@ function closeTutorialModal() {
         m.style.display = "none";
         m.classList.remove("tutorial-modal--welcome");
     }
+    updateBodyScrollLock();
 }
 
 function saveSettings() {
@@ -1401,10 +1840,14 @@ function renderAll() {
         const branchNo = getTaskBranchNo(task);
         const depEligible = !isParent && branchNo !== "010";
         const depPrevDeadline = depEligible && task.fFlag ? (getPrevChildTask(task)?.deadline || "") : "";
-        const msMin = maxDateStr(task.startDate || "", depPrevDeadline || "");
-        const targetMin = msMin;
+        // 依存（fFlag）は「直前子の納期」を下限にする（期間のみ）
         const startMin = depPrevDeadline || "";
         const deadlineMin = maxDateStr(task.startDate || "", depPrevDeadline || "");
+        // ◇/★ は「自分の期間」に依存（他の子の影響を受けない）
+        const msMin = !isParent ? (task.startDate || "") : "";
+        const msMax = !isParent ? (task.deadline || "") : "";
+        const targetMin = !isParent ? (task.startDate || "") : "";
+        const targetMax = !isParent ? (task.deadline || "") : "";
 
         // ★追加：期限切れの判定ロジック
         const deadlineDate = task.deadline ? new Date(task.deadline) : null;
@@ -1508,20 +1951,23 @@ function renderAll() {
         const extLockHtml = isExt
             ? `<span class="external-lock"${helpAttr('外部CSV：閲覧専用のため一覧からは編集できません')}>🔒</span>`
             : "";
+        const parentThemeHelp = isParent
+            ? helpAttr("テーマ名：親タスクのテーマ／課題の見出しを編集します")
+            : "";
+        const childThemeHelp = !isParent
+            ? helpAttr("表示名：子タスクのテーマ列に出す短い表示を編集します")
+            : "";
+        const themeNameClass = isParent ? "theme-name theme-name-parent" : "theme-name";
         const col3 = `<td style="${cellStyle}">
             <div class="theme-cell${isExt ? " external-task-row" : ""}">
-                <div class="theme-cell-main">
+                <div class="theme-cell-main"${parentThemeHelp}>
                     <div class="theme-top">
                         ${accordionBtn}
                         ${extLockHtml}
-                        <span class="theme-name"
+                        <span class="${themeNameClass}"
                               contenteditable="${!isLocked}"
                               oninput="updateDataSilent(${task.id}, 'PrimaryStep', this.innerText)"
-                              onblur="renderAll()"${helpAttr(
-                                  isParent
-                                      ? "テーマ名：親タスクのテーマ／課題の見出しを編集します"
-                                      : "表示名：子タスクのテーマ列に出す短い表示を編集します"
-                              )}>${getPrimaryStep(task)}</span>
+                              onblur="renderAll()"${childThemeHelp}>${getPrimaryStep(task)}</span>
                     </div>
                     <div class="theme-meta">
                         <span class="theme-code">[${getDisplayTaskCode(task)}]</span>
@@ -1542,6 +1988,7 @@ function renderAll() {
                    value="${task.msDate || ''}"
                    ${isLocked ? 'disabled' : ''}
                    min="${msMin}"
+                   ${msMax ? `max="${msMax}"` : ""}
                    title=""
                    onchange="updateTaskValue(${task.id}, 'msDate', this.value)"
                    style="font-size:0.75rem; border:none; background:transparent; width:100%; text-align:center;">
@@ -1558,6 +2005,7 @@ function renderAll() {
                    value="${getTargetDate(task) || ''}"
                    ${isLocked ? 'disabled' : ''}
                    min="${targetMin}"
+                   ${targetMax ? `max="${targetMax}"` : ""}
                    title=""
                    onchange="updateTaskValue(${task.id}, 'TargetDate', this.value)"
                    style="font-size:0.75rem; border:none; background:transparent; width:100%; text-align:center;">
@@ -1588,14 +2036,24 @@ function renderAll() {
         const parentControlsHtml = (isParent && !isLocked)
             ? `<span class="parent-issue-controls">${addChildBtn}${periodResetBtn}${parentDepToggleHtml}</span>`
             : "";
-        const col6 = `<td style="word-break:break-all;">
-            <div class="issue-cell-inner">
-                <span class="issue-text" contenteditable="${!isLocked}"
+        const issueHelp = helpAttr(
+            "業務内容：親は上段がメモ・下段が操作。子は1行で編集。はみ出しは省略し、ホバーで全文を表示します（テーマ列と同様）"
+        );
+        const issueTextSpan = `<span class="issue-text issue-text--ellipsis-tip${
+            isParent ? " issue-text-parent" : " issue-text-child"
+        }" contenteditable="${!isLocked}"
                       oninput="updateDataSilent(${task.id}, 'SecondaryStep', this.innerText)"
-                      onblur="renderAll()"${helpAttr('業務内容：子タスクの具体的な作業内容を編集します（親行ではボタン類が並びます）')}>${getSecondaryStep(task)}</span>
-                ${(!isParent ? depCheckboxHtml : "") || parentControlsHtml}
-            </div>
-        </td>`;
+                      onblur="renderAll()"${issueHelp}>${getSecondaryStep(task)}</span>`;
+        const col6Inner = isParent
+            ? `<div class="issue-cell-inner issue-cell-inner--parent">
+                <div class="issue-text-row">${issueTextSpan}</div>
+                <div class="issue-actions-row">${parentControlsHtml}</div>
+            </div>`
+            : `<div class="issue-cell-inner issue-cell-inner--child">
+                ${issueTextSpan}
+                ${depCheckboxHtml}
+            </div>`;
+        const col6 = `<td class="td-issue-col">${col6Inner}</td>`;
 
         const col7Help = isParent
             ? "期間：上が着手・下が納期。親の着手と納期がどちらも空のときに着手を入れると、子へ1日ずつ連番で入ります（クリックで日付変更）"
@@ -1659,10 +2117,12 @@ function switchView(viewName) {
     const timeEl = document.getElementById('timelineView');
     const btnL = document.getElementById('btnList');
     const btnT = document.getElementById('btnTimeline');
+    const rangeGroup = document.querySelector('.timeline-range-group');
 
     if (viewName === 'list') {
         listEl.style.display = 'block';
         timeEl.style.display = 'none';
+        if (rangeGroup) rangeGroup.style.display = 'none';
         if (btnL) {
             btnL.classList.add('view-btn-active');
             btnL.classList.remove('view-btn-inactive');
@@ -1674,6 +2134,8 @@ function switchView(viewName) {
     } else {
         listEl.style.display = 'none';
         timeEl.style.display = 'block';
+        if (rangeGroup) rangeGroup.style.display = 'inline-flex';
+        hideThemeOverflowTooltip();
         if (btnT) {
             btnT.classList.add('view-btn-active');
             btnT.classList.remove('view-btn-inactive');
@@ -1689,6 +2151,7 @@ function switchView(viewName) {
 
 // 月の開閉を切り替える関数
 function toggleMonth(mIdx) {
+    if (forcedCollapsedMonths && forcedCollapsedMonths.has(mIdx)) return;
     const index = collapsedMonths.indexOf(mIdx);
     if (index === -1) {
         collapsedMonths.push(mIdx); // 閉じる
@@ -1696,6 +2159,33 @@ function toggleMonth(mIdx) {
         collapsedMonths.splice(index, 1); // 開く
     }
     renderTimeline(); // 再描画
+}
+
+/** YYYY-MM-DD → 「2026年5月5日」 */
+function formatDateJpFromISO(iso) {
+    if (!iso || typeof iso !== "string") return "";
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return iso;
+    return `${m[1]}年${parseInt(m[2], 10)}月${parseInt(m[3], 10)}日`;
+}
+
+function showTimelineMarkerTooltip(kind, task, e) {
+    const tooltip = ensureTimelineTooltip();
+    const nameLine =
+        kind === "ms"
+            ? getFirstFlag(task) || "（展開イベント名なし）"
+            : getTargetName(task) || "（イベント名なし）";
+    const dateLine =
+        kind === "ms"
+            ? task.msDate
+                ? formatDateJpFromISO(task.msDate)
+                : "日程なし"
+            : getTargetDate(task)
+              ? formatDateJpFromISO(String(getTargetDate(task)))
+              : "日程なし";
+    tooltip.innerHTML = `<strong>${escapeHtml(nameLine)}</strong><br>${escapeHtml(dateLine)}`;
+    tooltip.style.display = "block";
+    moveTimelineTooltip(e);
 }
 
 /**
@@ -1770,7 +2260,7 @@ function renderTimeline() {
         for (let i = 0; i < monthsCount; i++) {
             const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
             const daysInMonth = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
-            const isCollapsed = collapsedMonths.includes(i);
+            const isCollapsed = forcedCollapsedMonths.has(i) || collapsedMonths.includes(i);
 
             if (d.getMonth() === mDate.getMonth() && d.getFullYear() === mDate.getFullYear()) {
                 return x + (isCollapsed ? 5 : (d.getDate() - 1) * dayWidth);
@@ -1782,11 +2272,24 @@ function renderTimeline() {
 
     const monthsCount = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth()) + 1;
     collapsedMonths = collapsedMonths.filter(i => i >= 0 && i < monthsCount);
+
+    // 今日の月を起点に N か月だけ操作可能にし、それ以外は折りたたみ固定（+グレーアウト）
+    const baseIndex = (() => {
+        const diff = (baseStart.getFullYear() - startDate.getFullYear()) * 12 + (baseStart.getMonth() - startDate.getMonth());
+        return Math.max(0, Math.min(monthsCount - 1, diff));
+    })();
+    const endIndexExclusive = Math.min(monthsCount, baseIndex + timelineMonthRange);
+    forcedCollapsedMonths = new Set();
+    for (let mi = 0; mi < monthsCount; mi++) {
+        if (mi < baseIndex || mi >= endIndexExclusive) forcedCollapsedMonths.add(mi);
+    }
+
     let gridTotalWidth = 0;
     for (let i = 0; i < monthsCount; i++) {
         const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
         const count = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
-        gridTotalWidth += collapsedMonths.includes(i) ? 30 : count * dayWidth;
+        const isCollapsed = forcedCollapsedMonths.has(i) || collapsedMonths.includes(i);
+        gridTotalWidth += isCollapsed ? 30 : count * dayWidth;
     }
 
     // --- 3. ヘッダー行の生成 ---
@@ -1808,11 +2311,12 @@ function renderTimeline() {
     for (let i = 0; i < monthsCount; i++) {
         const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
         const daysInMonth = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
-        const isCollapsed = collapsedMonths.includes(i);
+        const isForced = forcedCollapsedMonths.has(i);
+        const isCollapsed = isForced || collapsedMonths.includes(i);
 
         const mLabel = document.createElement('div');
         mLabel.style.width = isCollapsed ? `30px` : `${daysInMonth * dayWidth}px`;
-        mLabel.style.cursor = 'pointer';
+        mLabel.style.cursor = isForced ? 'not-allowed' : 'pointer';
         mLabel.style.borderRight = '1px dashed #ccc';
         mLabel.style.fontSize = '0.8rem';
         mLabel.style.fontWeight = 'bold';
@@ -1831,11 +2335,20 @@ function renderTimeline() {
             mLabel.style.textAlign = 'left';
             mLabel.innerHTML = `&minus; ${mDate.getMonth() + 1}月`;
         }
-        mLabel.onclick = () => toggleMonth(i);
-        mLabel.setAttribute(
-            "data-help",
-            "月の折りたたみ：クリックでこの月の日付列をまとめて狭くする／広げます"
-        );
+        if (isForced) {
+            mLabel.classList.add("month-toggle-disabled");
+            mLabel.onclick = null;
+            mLabel.setAttribute(
+                "data-help",
+                `月の折りたたみ（制限中）：表示範囲（${timelineMonthRange}か月）外のため固定で折りたたみです`
+            );
+        } else {
+            mLabel.onclick = () => toggleMonth(i);
+            mLabel.setAttribute(
+                "data-help",
+                "月の折りたたみ：クリックでこの月の日付列をまとめて狭くする／広げます"
+            );
+        }
 
         monthHeaderArea.appendChild(mLabel);
     }
@@ -1844,7 +2357,7 @@ function renderTimeline() {
     const timelineSunRects = (() => {
         const rects = [];
         for (let mi = 0; mi < monthsCount; mi++) {
-            if (collapsedMonths.includes(mi)) continue;
+            if (forcedCollapsedMonths.has(mi) || collapsedMonths.includes(mi)) continue;
             const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + mi, 1);
             const daysInMonth = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
             for (let d = 1; d <= daysInMonth; d++) {
@@ -2082,7 +2595,17 @@ function renderTimeline() {
             diamond.style.transform = 'translateX(-50%)';
             diamond.style.zIndex = '8';
             diamond.style.textShadow = '1px 1px 2px #000';
+            diamond.style.cursor = "default";
             diamond.setAttribute("data-help", "◇マイルストーン：展開（FirstFlag）に紐づく基準日を示します");
+            diamond.addEventListener("mouseenter", (evt) => {
+                if (!helpHoverOn) showTimelineMarkerTooltip("ms", task, evt);
+            });
+            diamond.addEventListener("mousemove", (evt) => {
+                if (!helpHoverOn) moveTimelineTooltip(evt);
+            });
+            diamond.addEventListener("mouseleave", () => {
+                if (!isDraggingNow) hideTimelineTooltip();
+            });
             rArea.appendChild(diamond);
         }
 
@@ -2101,7 +2624,17 @@ function renderTimeline() {
             star.style.transform = 'translateX(-50%)';
             star.style.zIndex = '9';
             star.style.textShadow = '0 0 3px #fff';
+            star.style.cursor = "default";
             star.setAttribute("data-help", "★ターゲット：イベント（Target）の目標日を示します");
+            star.addEventListener("mouseenter", (evt) => {
+                if (!helpHoverOn) showTimelineMarkerTooltip("tar", task, evt);
+            });
+            star.addEventListener("mousemove", (evt) => {
+                if (!helpHoverOn) moveTimelineTooltip(evt);
+            });
+            star.addEventListener("mouseleave", () => {
+                if (!isDraggingNow) hideTimelineTooltip();
+            });
             rArea.appendChild(star);
         }
 
@@ -2157,7 +2690,7 @@ function renderTimeline() {
         });
     }
 
-    const delayMs = hasAnimateIn ? 330 : 0;
+    const delayMs = hasAnimateIn ? ACCORDION_ROW_ANIM_IN_MS : 0;
     const scheduleDrawDependencyLines = () => {
         if (dependencyDrawTimer) clearTimeout(dependencyDrawTimer);
         if (!delayMs) {
@@ -2211,6 +2744,12 @@ function startDrag(e, task, bar) {
     const minDaysMoved = minStartDate
         ? Math.round((minStartDate - originalStart) / (1000 * 60 * 60 * 24))
         : null;
+    const markers = getMarkersMinMaxDate(task);
+    // ◇/★ を期間外に出さないための移動範囲（ドラッグ＝期間を平行移動）
+    const markerMinDaysMoved =
+        markers.max ? Math.round((markers.max - originalEnd) / (1000 * 60 * 60 * 24)) : null;
+    const markerMaxDaysMoved =
+        markers.min ? Math.round((markers.min - originalStart) / (1000 * 60 * 60 * 24)) : null;
 
     // ドラッグ中の見た目
     bar.style.transition = "none"; // 【思惑①】移動中はアニメを消してシームレスに
@@ -2221,9 +2760,12 @@ function startDrag(e, task, bar) {
         const deltaX = moveEvent.clientX - startX;
         // 【思惑①】見た目上の位置をリアルタイムに更新
         let previewDays = Math.round(deltaX / 15);
-        if (minDaysMoved !== null) {
-            previewDays = Math.max(previewDays, minDaysMoved);
-        }
+        const lower = Math.max(
+            minDaysMoved !== null ? minDaysMoved : -Infinity,
+            markerMinDaysMoved !== null ? markerMinDaysMoved : -Infinity
+        );
+        const upper = markerMaxDaysMoved !== null ? markerMaxDaysMoved : Infinity;
+        previewDays = Math.max(lower, Math.min(upper, previewDays));
         bar.style.left = `${initialLeft + previewDays * 15}px`;
         const previewStart = new Date(originalStart);
         previewStart.setDate(originalStart.getDate() + previewDays);
@@ -2241,9 +2783,12 @@ function startDrag(e, task, bar) {
     const onMouseUp = (upEvent) => {
         const deltaX = upEvent.clientX - startX;
         let daysMoved = Math.round(deltaX / 15);
-        if (minDaysMoved !== null) {
-            daysMoved = Math.max(daysMoved, minDaysMoved);
-        }
+        const lower = Math.max(
+            minDaysMoved !== null ? minDaysMoved : -Infinity,
+            markerMinDaysMoved !== null ? markerMinDaysMoved : -Infinity
+        );
+        const upper = markerMaxDaysMoved !== null ? markerMaxDaysMoved : Infinity;
+        daysMoved = Math.max(lower, Math.min(upper, daysMoved));
         if (daysMoved !== 0) {
             const newStart = new Date(originalStart);
             newStart.setDate(originalStart.getDate() + daysMoved);
@@ -2277,6 +2822,12 @@ function startResize(e, task, bar) {
     const originalWidth = parseFloat(bar.style.width) || 15;
     const baseStart = task.startDate || task.deadline || task.msDate;
     const startDate = baseStart ? new Date(baseStart) : new Date();
+    const markers = getMarkersMinMaxDate(task);
+    // リサイズ＝納期（右端）だけ変更。◇/★ が期間外に出ないよう、納期の最小値を底上げ
+    const minEndByMarkers =
+        markers.max ? dateToIsoLocal(markers.max) : "";
+    // YYYY-MM-DD は UTC 解釈→toISOString は安定。setHours を触ると前日ズレし得るので、着手は入力値を固定で使う
+    const startIso = (task.startDate || startDate.toISOString().split("T")[0]) || "";
 
     const onMouseMove = (moveEvent) => {
         const deltaX = moveEvent.clientX - startX;
@@ -2294,7 +2845,19 @@ function startResize(e, task, bar) {
             const widthPx = Math.max(15, (diffDays + 1) * 15);
             bar.style.width = `${widthPx}px`;
         }
-        task.startDate = startDate.toISOString().split('T')[0];
+        // ◇/★ が startDate より前にある場合、リサイズだけでは救えない（ドラッグで前に動かす必要）
+        if (markers.min && dateToIsoLocal(markers.min) < startIso) {
+            // 表示だけ崩れないようにしつつ、警告
+            showToast("◇/★ が着手日より前です（バーを左へ動かして期間に入れてください）");
+        }
+        if (minEndByMarkers && newDeadlineStr < minEndByMarkers) {
+            newDeadlineStr = minEndByMarkers;
+            const clamped = new Date(minEndByMarkers);
+            const diffDays = Math.round((clamped - startDate) / (1000 * 60 * 60 * 24));
+            const widthPx = Math.max(15, (diffDays + 1) * 15);
+            bar.style.width = `${widthPx}px`;
+        }
+        task.startDate = startIso;
         task.deadline = newDeadlineStr;
         reflectTaskDatesInList(task);
         syncParentDates(getTaskFamilyKey(task));
@@ -2362,8 +2925,26 @@ function updateTaskValue(taskId, field, value) {
             return;
         }
         const depPrevDeadline = getDependencyPrevDeadlineMin(task);
-        if (depPrevDeadline && (field === 'msDate' || field === 'TargetDate' || field === 'target')) {
-            if (value && value < depPrevDeadline) value = depPrevDeadline;
+        // ◇/★ は「自分の期間」に依存（他の子の影響を受けない）
+        if (!isParentTask(task) && (field === "msDate" || field === "TargetDate" || field === "target")) {
+            if (value) {
+                const v = String(value);
+                if (!isIsoDateInOwnPeriod(task, v)) {
+                    showToast("◇/★ はこの子タスクの期間内に設定してください");
+                    // 入力は反映せず終了
+                    renderAll();
+                    return;
+                }
+            }
+        }
+
+        // 依存ON時：期間が既に入っていて矛盾する場合はONにしない（警告）
+        if (field === "fFlag" && !!value) {
+            if (!canEnableDependencyForChild(task)) {
+                showToast("連携ONにできません：直前の子の納期がこの子の着手日より後です");
+                renderAll();
+                return;
+            }
         }
         // 1. 配列内のデータを書き換え
         if (field === "PrimaryStep" || field === "content") setPrimaryStep(tasks[index], value);
@@ -2417,7 +2998,18 @@ function updateMasterDropdown() {
 function updateTaskFromMaster(taskId, newName) {
     const task = tasks.find(t => t.id === taskId);
     const masterEntry = yearlyMaster.find(m => m.name === newName);
-    if (task && !isExternalTask(task)) { setFirstFlag(task, newName); task.msDate = masterEntry ? masterEntry.date : ""; save(); renderAll(); }
+    if (!task || isExternalTask(task)) return;
+    setFirstFlag(task, newName);
+    const nextDate = masterEntry ? (masterEntry.date || "") : "";
+    if (nextDate && !isIsoDateInOwnPeriod(task, nextDate)) {
+        showToast("◇日付がこの子タスクの期間外のため、マスターから設定できません");
+        save();
+        renderAll();
+        return;
+    }
+    task.msDate = nextDate;
+    save();
+    renderAll();
 }
 
 function updateTaskTargetFromMaster(taskId, newName) {
@@ -2425,7 +3017,14 @@ function updateTaskTargetFromMaster(taskId, newName) {
     const masterEntry = yearlyMaster.find(m => m.name === newName);
     if (task && !isExternalTask(task)) {
         setTargetName(task, newName);
-        setTargetDate(task, masterEntry ? masterEntry.date : "");
+        const nextDate = masterEntry ? (masterEntry.date || "") : "";
+        if (nextDate && !isIsoDateInOwnPeriod(task, nextDate)) {
+            showToast("★日付がこの子タスクの期間外のため、マスターから設定できません");
+            save();
+            renderAll();
+            return;
+        }
+        setTargetDate(task, nextDate);
         save();
         renderAll();
     }
@@ -2476,6 +3075,11 @@ function updateTaskDate(id, field, value) {
             // 納期を着手日より前にしようとしたら、強制的に着手日と同じにする
             task.deadline = task.startDate;
             showToast("納期は着手日以降に設定してください");
+        }
+
+        // 期間を設定/変更したら、◇/★ が自分の期間外なら警告（他の子には影響しない）
+        if (!isParentTask(task) && (field === "startDate" || field === "deadline")) {
+            warnIfMarkersOutsideOwnPeriod(task);
         }
 
         // 親の着手・納期がどちらも空だった状態で着手日を入れたときだけ、子へ連番でコピー（タイムラインで個別調整可）
@@ -2843,6 +3447,7 @@ function closeMemo() {
     if (saveBtn) saveBtn.style.display = "";
     const ta = document.getElementById('memoText');
     if (ta) ta.readOnly = false;
+    updateBodyScrollLock();
 }
 
 // 補足：メモを開く関数も、これと対になるように ID を確認してください
@@ -2857,6 +3462,7 @@ function openMemo(taskId) {
     }
     if (saveBtn) saveBtn.style.display = isExternalTask(task) ? "none" : "";
     document.getElementById('memoModal').style.display = 'flex'; // 中央に表示
+    updateBodyScrollLock();
 }
 function saveMemo() {
     const text = document.getElementById('memoText').value;
@@ -2887,13 +3493,13 @@ function setupEnterKey() {
 function openYearlyMaster() {
     const modal = document.getElementById('yearlyMasterModal');
     if (modal) modal.style.display = 'flex';
-    document.body.classList.add('no-scroll');
+    updateBodyScrollLock();
     renderMasterList();
 }
 function closeYearlyMaster() {
     const modal = document.getElementById('yearlyMasterModal');
     if (modal) modal.style.display = 'none';
-    document.body.classList.remove('no-scroll');
+    updateBodyScrollLock();
     renderAll();
 }
 // A: 新規追加
@@ -3418,11 +4024,27 @@ function importCSV(event) {
 
         if (isExternal) {
             // 外部表示用のフラグを付けて保持（保存しない）
-            externalTasks = imported.map(t => ({
-                ...t,
-                __external: true,
-                __externalOwnerId: incomingOwner
-            }));
+            const ns = `EXT${incomingOwner}_`;
+            externalTasks = imported.map(t => {
+                const code = String(t.taskCode || "").trim();
+                if (!code || !code.includes("-")) {
+                    return {
+                        ...t,
+                        __external: true,
+                        __externalOwnerId: incomingOwner
+                    };
+                }
+                const [family, branch] = code.split("-");
+                // 内部データと taskCode/familyKey が衝突すると、アコーディオン・親子判定が巻き込まれる。
+                // 外部は表示上 taskCode を伏せる（******）ので、内部キーだけ確実に別物にする。
+                const namespacedCode = `${ns}${family}-${branch}`;
+                return {
+                    ...t,
+                    taskCode: namespacedCode,
+                    __external: true,
+                    __externalOwnerId: incomingOwner
+                };
+            });
             showToast(`外部CSV（${incomingOwner}）を表示中（閲覧専用）`);
             renderAll();
             event.target.value = "";
@@ -3635,17 +4257,17 @@ function animateListClose(familyKey, done) {
             row.classList.add('row-animate-out');
         }
     });
-    setTimeout(done, 280);
+    setTimeout(done, ACCORDION_ROW_ANIM_OUT_MS);
 }
 
 function animateTimelineClose(familyKey, done) {
-    const rows = Array.from(document.querySelectorAll('.timeline-row-area, .sticky-label'));
+    const rows = Array.from(document.querySelectorAll(".timeline-row-area, .sticky-label"));
     rows.forEach((row) => {
         const fam = row.dataset.family;
-        const isParent = row.dataset.parent === '1';
-        if (fam === familyKey && !isParent) row.classList.add('row-animate-out');
+        const isParent = row.dataset.parent === "1";
+        if (fam === familyKey && !isParent) row.classList.add("row-animate-out");
     });
-    setTimeout(done, 280);
+    setTimeout(done, ACCORDION_ROW_ANIM_OUT_MS);
 }
 
 // ① ＋/－ ボタンの開閉処理
@@ -3692,15 +4314,14 @@ function toggleTimelineAccordion(parentTaskId) {
 
     if (index === -1) {
         animateTimelineClose(familyKey, () => {
-            collapsedThemesTimeline.push(familyKey); // 閉じる
+            collapsedThemesTimeline.push(familyKey);
             renderTimeline();
         });
         return;
-    } else {
-        collapsedThemesTimeline.splice(index, 1); // 開く
-        lastToggledTheme = familyKey; // 展開時のみアニメ対象を記録
     }
-    renderTimeline(); // タイムラインの再描画関数（名称に合わせて変えてください）
+    collapsedThemesTimeline.splice(index, 1);
+    lastToggledTheme = familyKey;
+    renderTimeline();
 }
 
 // ② 子タスクの追加処理
@@ -3893,11 +4514,13 @@ function openNewTaskModal() {
     validateNewTask();
     document.getElementById('newTaskModal').style.display = 'flex';
     document.getElementById('newContent').focus();
+    updateBodyScrollLock();
 }
 
 // モーダルを閉じる
 function closeNewTaskModal() {
     document.getElementById('newTaskModal').style.display = 'none';
+    updateBodyScrollLock();
 }
 
 // 登録実行（親タスク専用）

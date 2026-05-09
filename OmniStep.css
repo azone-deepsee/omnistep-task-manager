@@ -6,6 +6,9 @@
     --bg-light: #f4f4f4;
     --row-height: 48px; /* 行の高さを統一 */
     --label-width: 280px; /* 左ラベルの幅 */
+    /* リスト／タイムラインの子行アコーディオン（開く＝in / 閉じる＝out を別指定。OmniStep.js の *_MS と揃える） */
+    --accordion-row-duration-in: 0.25s;
+    --accordion-row-duration-out: 0.3s;
 
     /* アプリ全体テーマ（sharp 既定。sepia / cool / soft / dark は html[data-theme] で上書き） */
     --app-page-bg: #eee;
@@ -187,6 +190,7 @@ tbody tr:hover,
 }
 .external-header h1 { margin: 0; font-size: 1.6rem; color: var(--app-text); }
 .today-date { font-weight: bold; color: var(--app-text-dim); font-size: 1rem; }
+.today-date:hover { text-decoration: underline; color: var(--app-view-active-bg); }
 
 /* ダーク切替（ギアと同サイズ） */
 .theme-toggle-btn {
@@ -265,6 +269,43 @@ tbody tr:hover,
 .view-selector .view-btn-inactive {
     background: var(--app-view-inactive-bg) !important;
     color: var(--app-view-inactive-text) !important;
+}
+
+/* タイムライン表示範囲（3/6/9/12か月） */
+.timeline-range-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    margin-left: 10px;
+    border: 1px solid var(--app-border-strong);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--app-surface-2);
+}
+.timeline-range-group .range-btn {
+    border: none;
+    border-radius: 0;
+    padding: 7px 10px;
+    font-size: 0.82rem;
+    background: transparent;
+    color: var(--app-text);
+    cursor: pointer;
+    transition: 0.15s;
+    white-space: nowrap;
+}
+.timeline-range-group .range-btn:hover {
+    filter: brightness(1.03);
+    background: rgba(0, 0, 0, 0.04);
+}
+.timeline-range-group .range-btn.is-active {
+    background: var(--app-view-active-bg);
+    color: #fff;
+    font-weight: 700;
+}
+
+.month-toggle-disabled {
+    opacity: 0.55;
+    cursor: not-allowed !important;
 }
 
 /* 設定モーダル：ライト配色チップ */
@@ -472,13 +513,14 @@ button:disabled {
 /* スクロールTOPへボタン（左下追従） */
 .scroll-top-floating-btn {
     position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 18px;
+    transform: none;
     bottom: 18px;
     z-index: 9999;
-    padding: 8px 12px;
+    padding: 8px 14px;
     border-radius: 999px;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+    min-width: 9.8rem; /* 少しだけ幅を確保（見落とし防止） */
 }
 
 #inContent { flex: 1.5; }
@@ -773,6 +815,150 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
 /* モーダル等 */
 .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
 .modal-content { background: var(--app-modal-bg); color: var(--app-text); padding: 20px; border-radius: 5px; width: 600px; }
+
+/* テーマ期間カレンダー（今日の日付クリックで開く・設定モーダル相当の幅） */
+.theme-calendar-modal {
+    z-index: 1050;
+}
+.theme-calendar-modal-content {
+    width: min(560px, 94vw);
+    max-height: min(85vh, 820px);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: 18px 20px;
+    border: 1px solid var(--app-border-strong);
+    box-shadow: 0 10px 32px var(--app-container-shadow);
+}
+.theme-calendar-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.theme-calendar-modal-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.theme-cal-month-label {
+    font-weight: 700;
+    font-size: 0.95rem;
+    min-width: 7.5rem;
+    text-align: center;
+}
+.theme-calendar-hint {
+    font-size: 0.78rem;
+    color: var(--app-text-muted);
+    margin: 8px 0 0 0;
+    line-height: 1.35;
+}
+.theme-calendar-scroll {
+    margin-top: 10px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 200px;
+    padding-right: 4px;
+    scrollbar-width: thin;
+}
+.theme-cal-dow-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0;
+    margin-bottom: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--app-modal-bg);
+    padding-bottom: 4px;
+    padding-top: 2px;
+    border-bottom: 1px solid var(--app-border-light);
+    box-shadow: 0 4px 8px -4px var(--app-container-shadow);
+}
+.theme-cal-dow-cell {
+    padding: 4px 0;
+    color: var(--app-text);
+    background: var(--app-modal-bg);
+}
+.theme-cal-dow-sun {
+    color: #d93025;
+}
+.theme-cal-dow-sat {
+    color: #1a73e8;
+}
+.theme-cal-week {
+    margin-bottom: 10px;
+    border: 1px solid var(--app-border-light);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--app-surface-2);
+}
+.theme-cal-week-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: var(--app-surface-muted);
+    border-bottom: 1px solid var(--app-border-light);
+}
+.theme-cal-day-cell {
+    text-align: center;
+    padding: 4px 2px;
+    font-size: 9px;
+    min-height: 1.35rem;
+    box-sizing: border-box;
+}
+.theme-cal-day-num {
+    display: inline-block;
+    min-width: 1.25rem;
+    line-height: 1.25;
+    font-size: 9px;
+}
+.theme-cal-day-outside .theme-cal-day-num {
+    color: var(--app-text-muted);
+    opacity: 0.55;
+}
+.theme-cal-day-sun:not(.theme-cal-day-outside) .theme-cal-day-num {
+    color: #d93025;
+}
+.theme-cal-day-sat:not(.theme-cal-day-outside) .theme-cal-day-num {
+    color: #1a73e8;
+}
+.theme-cal-day-today .theme-cal-day-num {
+    background: var(--app-view-active-bg);
+    color: #fff;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-weight: 700;
+    font-size: 9px;
+}
+.theme-cal-week-gantt {
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--app-surface);
+}
+.theme-cal-bar {
+    position: absolute;
+    box-sizing: border-box;
+    border-radius: 3px;
+    color: #fff;
+    font-size: 9px;
+    line-height: 19px;
+    padding: 0 5px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    z-index: 1;
+    pointer-events: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.theme-cal-bar-label {
+    pointer-events: none;
+}
 
 /* チュートリアル（設定の💡・初回未設定時の手引き） */
 .tutorial-modal {
@@ -1105,23 +1291,94 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     opacity: 0.85;
 }
 
-/* タスクリスト：業務内容セル（右端に依存フラグ） */
-.issue-cell-inner {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+/* タスクリスト：業務内容列（親＝上段コメント／下段ボタン、子＝1行＋右チェック、省略はホバーで全文） */
+.td-issue-col {
+    overflow: hidden;
+    /* 同一行の他列が高いとき、業務内容を上下中央にすると「縦に余白が空いた改行」に見える */
+    vertical-align: top;
+    box-sizing: border-box;
 }
 
-.issue-text {
-    flex: 1;
+.issue-cell-inner--parent {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
     min-width: 0;
-    word-break: break-all;
+}
+
+.issue-text-row {
+    min-width: 0;
+}
+
+.issue-actions-row {
+    min-width: 0;
+}
+
+.issue-actions-row:empty {
+    display: none;
+}
+
+/* grid：狭くても「本文 | チェック」の2列に固定（flex の折返しより安定） */
+.issue-cell-inner--child {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+.issue-text-parent,
+.issue-text-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+    display: block;
+    box-sizing: border-box;
+}
+
+.issue-text-parent {
+    width: 100%;
+}
+
+.issue-text-child {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.issue-text-parent:focus {
+    white-space: normal;
+    overflow: auto;
+    text-overflow: clip;
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.45);
+    border-radius: 2px;
+    max-height: 6.5em;
+}
+
+/* 子は常に1行：フォーカス中も改行させず横スクロールで編集 */
+.issue-text-child:focus {
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    text-overflow: clip;
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.45);
+    border-radius: 2px;
+    max-height: none;
+    scrollbar-width: thin;
 }
 
 .dep-flag-input {
     flex: 0 0 auto;
+    align-self: center;
     cursor: pointer;
-    transform: scale(1.1);
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    flex-shrink: 0;
 }
 
 /* 親タスク：連携一括ボタン */
@@ -1208,11 +1465,16 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
 }
 
 .parent-issue-controls {
-    flex: 0 0 auto;
-    display: inline-flex;
+    display: flex;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 6px;
-    margin-left: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
 }
 
 .order-controls {
@@ -1373,13 +1635,13 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
 
 /* 親タスクから子タスクが「生えてくる」動き */
 .row-animate-in {
-    animation: slideDown 0.3s ease-out forwards;
+    animation: slideDown var(--accordion-row-duration-in) ease-out forwards;
     overflow: hidden;
     transform-origin: top;
 }
 
 .row-animate-out {
-    animation: slideUp 0.3535s ease-in forwards;
+    animation: slideUp var(--accordion-row-duration-out) ease-in forwards;
     overflow: hidden;
     transform-origin: top;
 }
@@ -1507,6 +1769,26 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     box-shadow: 0 8px 24px var(--app-container-shadow);
     pointer-events: none;
     white-space: normal;
+    word-break: break-word;
+}
+
+/* 親テーマ名・業務内容が枠から省略されているときの全文ホバー（ヘルプとは別） */
+.theme-overflow-tooltip {
+    position: fixed;
+    z-index: 100023;
+    max-width: min(560px, 92vw);
+    min-width: 10rem;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--app-text);
+    background: var(--app-modal-bg);
+    border: 1px solid var(--app-border-strong);
+    border-left: 4px solid #1a73e8;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px var(--app-container-shadow);
+    pointer-events: none;
+    white-space: pre-wrap;
     word-break: break-word;
 }
 
@@ -1863,4 +2145,160 @@ html[data-theme="dark"] .timeline-row-area.timeline-expired {
 html[data-theme="dark"] .timeline-bar.timeline-expired {
     background-color: #6e2424 !important;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+/* =============================================================================
+   狭いビューポート（max-width:1100px）：余白・サブ画面向け。一覧は横スクロール＋段増え抑制
+   ============================================================================= */
+
+.task-list {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+}
+
+/* table-layout:fixed のとき可変列が 0 幅に落ちるのを防ぐ（横スクロールで全体を見られる） */
+/* 業務内容列の最小幅（親行のボタン帯）を含めた概算 */
+#taskTable {
+    min-width: 1240px;
+    width: max(100%, 1240px);
+}
+
+/* グローバル th,td の固定 height が効くと複数行セルが潰れる／flex+省略が不安定になる */
+#taskTable thead th,
+#taskTable tbody td {
+    height: auto;
+    min-height: var(--row-height);
+}
+
+/* FirstFlag / TargetFlag：期間列（7列目）と同じ 110px に固定 */
+#taskTable th:nth-child(4),
+#taskTable td:nth-child(4),
+#taskTable th:nth-child(5),
+#taskTable td:nth-child(5) {
+    width: 110px;
+    min-width: 110px;
+    max-width: 110px;
+    box-sizing: border-box;
+}
+
+#taskTable th:nth-child(7),
+#taskTable td:nth-child(7) {
+    width: 110px;
+    min-width: 110px;
+    max-width: 110px;
+    box-sizing: border-box;
+}
+
+#taskTable th:nth-child(6),
+#taskTable td:nth-child(6) {
+    /* A案：親行の「＋子」「期間リセット」「連携一括」等が列からはみ出しにくい幅 */
+    min-width: 320px;
+    width: 26%;
+    max-width: none;
+}
+
+#taskTable td.td-issue-col {
+    vertical-align: top;
+}
+
+/* 1280 だと FHD の半分ウィンドウや余白で「狭い」と判定されやすい → 実際に詰まる幅だけ適用 */
+@media (max-width: 1100px) {
+    body {
+        padding: 10px 12px;
+    }
+
+    .container {
+        width: 100%;
+        max-width: none;
+        padding: 12px;
+        box-sizing: border-box;
+    }
+
+    .controls-row {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        row-gap: 10px;
+    }
+
+    .controls-row > div:first-child {
+        flex: 1 1 200px;
+        min-width: 0;
+    }
+
+    .action-buttons {
+        flex: 1 1 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+
+    .tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .tab {
+        flex: 0 0 auto;
+    }
+
+    .external-header {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 12px;
+        max-width: none;
+        margin: 0 0 10px 0;
+    }
+
+    .external-header h1 {
+        font-size: clamp(1.1rem, 3.5vw, 1.5rem);
+        word-break: break-word;
+    }
+
+    .header-right-group {
+        flex-wrap: wrap !important;
+        justify-content: flex-start;
+        gap: 8px !important;
+    }
+
+    #taskTable th:nth-child(3),
+    #taskTable td:nth-child(3) {
+        width: 220px;
+        min-width: 180px;
+    }
+
+    #taskTable th,
+    #taskTable td {
+        height: auto;
+        min-height: var(--row-height);
+        vertical-align: top;
+        box-sizing: border-box;
+    }
+
+    #taskTable td.td-issue-col {
+        overflow: hidden;
+        vertical-align: top;
+    }
+
+    /* wrap+100% だと theme-main が全幅を取り ▲▼ が必ず次段になる。1段のまま横スクロール */
+    .theme-cell {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        min-width: 0;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .theme-cell-main {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .timeline-unified-wrapper {
+        max-width: 100%;
+    }
 }

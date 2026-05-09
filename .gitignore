@@ -13,5 +13,6 @@ Desktop.ini
 *.log
 npm-debug.log*
 
-# 個人用メモやローカル専用ファイルを載せたくない場合は、下の行の先頭 # を外してください
-# 制作工程.csv
+# バックアップ .txt とローカル用 CSV（GitHub には含めない）
+*.txt
+制作工程.csv
