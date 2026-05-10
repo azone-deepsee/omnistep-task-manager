@@ -2,6 +2,10 @@
  *  * OmniStep Core Engine - Final Evolution (Complete Version)
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
+
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.0.0 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.0.0";
+
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
 let isDraggingNow = false; // ドラッグ中フラグ
@@ -55,6 +59,14 @@ const ACCORDION_ROW_ANIM_IN_MS = Math.round(0.3 * 1000) + 25;
 const ACCORDION_ROW_ANIM_OUT_MS = Math.round(0.35 * 1000) + 25;
 
 const statusList = ["未着手", "調査中", "進行中", "修正中", "完了"];
+
+/** テーマ色パレット（親行のカラーバーから選択） */
+const THEME_ACCENT_PALETTE = [
+    "#c62828", "#6a1b9a", "#283593", "#0277bd", "#00695c",
+    "#2e7d32", "#f57f17", "#e65100", "#546e7a", "#37474f"
+];
+
+let themeColorPickerEl = null;
 
 /** 枠1～6が空欄のときに使う既定名（従来の6カテゴリ） */
 const DEFAULT_CATEGORY_SIX = ["日常業務", "イベント", "デジタル化", "生産管理", "教育", "その他"];
@@ -665,6 +677,290 @@ function getTaskBranchNo(task) {
     return getPrimaryStep(task).trim().endsWith("：0") ? "000" : "010";
 }
 
+function normalizeThemeAccentHex(v) {
+    const s = String(v || "").trim();
+    if (!s) return "";
+    if (/^#[0-9A-Fa-f]{6}$/.test(s)) return s.toLowerCase();
+    if (/^#[0-9A-Fa-f]{3}$/.test(s)) {
+        const r = s[1],
+            g = s[2],
+            b = s[3];
+        return (`#${r}${r}${g}${g}${b}${b}`).toLowerCase();
+    }
+    return "";
+}
+
+function findParentInPool(familyKey, pool) {
+    const arr = pool || tasks;
+    return arr.find((t) => !t.archived && getTaskFamilyKey(t) === familyKey && isParentTask(t));
+}
+
+/** テーマ（親）に保存されたアクセント色。未設定は空文字 */
+function getThemeAccentForFamily(familyKey, pool) {
+    const p = findParentInPool(familyKey, pool);
+    return normalizeThemeAccentHex(p?.themeAccentColor);
+}
+
+function calendarInclusiveSpanDays(startIso, endIso) {
+    if (!startIso || !endIso) return 0;
+    const s = new Date(`${startIso}T12:00:00`);
+    const e = new Date(`${endIso}T12:00:00`);
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return 0;
+    return Math.floor((e - s) / 86400000) + 1;
+}
+
+/** 進捗状態を計画比較用のおおよその％に換算 */
+function statusToPlanPercent(status) {
+    const m = { 未着手: 0, 調査中: 10, 進行中: 45, 修正中: 75, 完了: 100 };
+    return m[status] ?? 0;
+}
+
+/**
+ * 子タスクの「期間に対する進捗の遅れ／先行／期限内完了」の表示用シグナル
+ * @returns {"risk"|"ahead"|"earlyDone"|null}
+ */
+function getChildScheduleSignal(task, todayMidnight) {
+    if (!task || isParentTask(task) || task.archived || isExternalTask(task)) return null;
+    if (!task.startDate || !task.deadline) return null;
+
+    const today0 = new Date(todayMidnight.getTime());
+    today0.setHours(0, 0, 0, 0);
+    const dl = new Date(`${task.deadline}T00:00:00`);
+    dl.setHours(0, 0, 0, 0);
+    const st = new Date(`${task.startDate}T00:00:00`);
+    st.setHours(0, 0, 0, 0);
+
+    if (task.status === "完了") {
+        const doneIso = String(task.progressUpdatedAt || "").trim();
+        if (!doneIso || !task.deadline) return null;
+        if (doneIso <= task.deadline) return "earlyDone";
+        return null;
+    }
+    if (dl < today0) return null;
+    if (today0 < st) return null;
+
+    const totalDays = calendarInclusiveSpanDays(task.startDate, task.deadline);
+    if (totalDays <= 0) return null;
+
+    const todayIso = dateToIsoLocal(today0);
+    const endClamp = todayIso <= task.deadline ? todayIso : task.deadline;
+    const elapsedDays = calendarInclusiveSpanDays(task.startDate, endClamp);
+    const expectedPct = Math.min(100, (elapsedDays / totalDays) * 100);
+    const actualPct = statusToPlanPercent(task.status);
+    const buffer = 6;
+
+    if (elapsedDays >= 1 && actualPct + buffer < expectedPct) return "risk";
+    if (actualPct > expectedPct + 14) return "ahead";
+    return null;
+}
+
+/** 進捗シグナル用アイコン（色帯と区別。tl＝タイムライン左ラベル用／期限内完了はバーの✨のみのため省略可） */
+function scheduleSignalIconHtml(sig, variant) {
+    if (!sig) return "";
+    if (variant === "tl" && sig === "earlyDone") return "";
+    const map = {
+        risk: { ch: "⚠️", tip: "期間に対して進捗が遅れている可能性があります" },
+        ahead: { ch: "🚀", tip: "計画より進捗が先行しています" },
+        earlyDone: { ch: "✨", tip: "期限内に完了しました" }
+    };
+    const x = map[sig];
+    if (!x) return "";
+    const cls =
+        variant === "tl" ? "schedule-signal-icon schedule-signal-icon--tl" : "schedule-signal-icon schedule-signal-icon--list";
+    return `<span class="${cls}" title="${escapeHtmlAttr(x.tip)}">${x.ch}</span>`;
+}
+
+function hexToRgba(hex, alpha) {
+    let h = String(hex || "").trim();
+    if (!/^#[0-9A-Fa-f]{6}$/i.test(h)) h = "#4285f4";
+    const r = parseInt(h.slice(1, 3), 16);
+    const g = parseInt(h.slice(3, 5), 16);
+    const b = parseInt(h.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** タイムラインPDCA：実行区間の終了日（子のみ）。未着手は null */
+function getTimelinePdcaExecEndIso(task, todayMidnight) {
+    if (!task || isParentTask(task)) return null;
+    if (!task.startDate || !task.deadline) return null;
+    if (task.status === "未着手") return null;
+    if (task.status === "完了") {
+        const d = String(task.progressUpdatedAt || "").trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d >= task.startDate && d <= task.deadline) return d;
+        return task.deadline;
+    }
+    const t0 = new Date(todayMidnight.getTime());
+    t0.setHours(0, 0, 0, 0);
+    const todayIso = dateToIsoLocal(t0);
+    if (todayIso < task.startDate) return null;
+    return todayIso <= task.deadline ? todayIso : task.deadline;
+}
+
+function addCalendarDaysIso(iso, deltaDays) {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return iso;
+    const d = new Date(`${iso}T12:00:00`);
+    d.setDate(d.getDate() + deltaDays);
+    return dateToIsoLocal(d);
+}
+
+function compareIsoDate(a, b) {
+    if (!a || !b) return 0;
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function maxIsoDate(a, b) {
+    return compareIsoDate(a, b) >= 0 ? a : b;
+}
+
+function minIsoDate(a, b) {
+    return compareIsoDate(a, b) <= 0 ? a : b;
+}
+
+/** 表示用：実績の着手（未設定時は計画着手） */
+function getPdcaActualStartForDisplay(task) {
+    if (!task || isParentTask(task) || task.status === "未着手") return null;
+    const c = String(task.pdcaActualStart || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(c)) return c;
+    return task.startDate || null;
+}
+
+/** 表示用：実績の終了（未設定時は従来ロジック） */
+function getPdcaActualEndForDisplay(task, todayMidnight) {
+    if (!task || isParentTask(task) || task.status === "未着手") return null;
+    const c = String(task.pdcaActualEnd || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(c)) return c;
+    return getTimelinePdcaExecEndIso(task, todayMidnight);
+}
+
+function timelinePixelSpanForRange(gridStartDate, dayWidth, getX, dStartIso, dEndIso) {
+    const s = new Date(`${dStartIso}T12:00:00`);
+    const e = new Date(`${dEndIso}T12:00:00`);
+    const startX = getX(s);
+    const endX = getX(e);
+    const w = Math.max(dayWidth, endX - startX + (s > gridStartDate ? dayWidth : 0));
+    return { startX, width: w };
+}
+
+/** 依存線用：子PDCAは計画区間の端を使う（実績の伸び・ずれに追従しない） */
+function timelineDepBarEdgeClientX(barEl, edge) {
+    const r = barEl.getBoundingClientRect();
+    const ow = barEl.offsetWidth || r.width || 1;
+    const scale = r.width / ow;
+    if (barEl.classList.contains("timeline-bar--pdca")) {
+        const pl = parseFloat(barEl.dataset.planLeft || "0");
+        const pw = parseFloat(barEl.dataset.planWidth || "0");
+        const left = r.left + pl * scale;
+        const right = r.left + (pl + pw) * scale;
+        return edge === "right" ? right : left;
+    }
+    return edge === "right" ? r.right : r.left;
+}
+
+/** タイムライン：実績だけ手で合わせるモード（デフォルトOFF・リストへ切替でOFF） */
+let pdcaActualEditMode = false;
+let timelineRenderRaf = null;
+
+function scheduleRenderTimeline() {
+    if (timelineRenderRaf != null) return;
+    timelineRenderRaf = requestAnimationFrame(() => {
+        timelineRenderRaf = null;
+        const tv = document.getElementById("timelineView");
+        const w = document.getElementById("timelineUnifiedWrapper");
+        if (tv && w && tv.style.display !== "none") renderTimeline();
+    });
+}
+
+function syncPdcaActualEditButton() {
+    const b = document.getElementById("btnPdcaActualEdit");
+    if (!b) return;
+    b.classList.toggle("is-active", pdcaActualEditMode);
+    b.setAttribute("aria-pressed", pdcaActualEditMode ? "true" : "false");
+}
+
+function togglePdcaActualEditMode() {
+    pdcaActualEditMode = !pdcaActualEditMode;
+    syncPdcaActualEditButton();
+    renderTimeline();
+}
+
+function ensurePdcaActualSeedFromComputed(task, todayMidnight) {
+    if (task.pdcaActualStart || task.pdcaActualEnd) return;
+    if (task.status === "未着手" || !task.startDate) return;
+    const e = getTimelinePdcaExecEndIso(task, todayMidnight);
+    if (!e) return;
+    task.pdcaActualStart = task.startDate;
+    task.pdcaActualEnd = e;
+    save();
+}
+
+function closeThemeColorPicker() {
+    if (themeColorPickerEl) {
+        themeColorPickerEl.remove();
+        themeColorPickerEl = null;
+    }
+    document.removeEventListener("click", onThemeColorPickerDoc, true);
+}
+
+function onThemeColorPickerDoc(e) {
+    if (themeColorPickerEl && !themeColorPickerEl.contains(e.target)) closeThemeColorPicker();
+}
+
+function openThemeColorPicker(ev, parentId) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    closeThemeColorPicker();
+    const pop = document.createElement("div");
+    pop.id = "themeColorPickerPopover";
+    pop.className = "theme-color-picker-popover";
+    pop.setAttribute("role", "dialog");
+    pop.setAttribute("aria-label", "テーマ色の選択");
+    const sw = THEME_ACCENT_PALETTE.map(
+        (hex) =>
+            `<button type="button" class="theme-color-swatch" data-hex="${hex}" style="background:${hex}" title="${hex}"></button>`
+    ).join("");
+    pop.innerHTML = `<div class="theme-color-picker-title">テーマ色</div><div class="theme-color-picker-swatches">${sw}</div><button type="button" class="theme-color-picker-clear">色を消す</button>`;
+    pop.querySelectorAll(".theme-color-swatch").forEach((btn) => {
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            const hex = btn.getAttribute("data-hex");
+            applyThemeAccentToParent(parentId, hex);
+            closeThemeColorPicker();
+        };
+    });
+    const clr = pop.querySelector(".theme-color-picker-clear");
+    if (clr) {
+        clr.onclick = (e) => {
+            e.stopPropagation();
+            applyThemeAccentToParent(parentId, "");
+            closeThemeColorPicker();
+        };
+    }
+    document.body.appendChild(pop);
+    themeColorPickerEl = pop;
+    const rect = ev.currentTarget.getBoundingClientRect();
+    let left = rect.left + window.scrollX;
+    let top = rect.bottom + window.scrollY + 4;
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+    const pw = pop.offsetWidth;
+    const ph = pop.offsetHeight;
+    if (left + pw > window.scrollX + window.innerWidth - 8) left = window.scrollX + window.innerWidth - pw - 8;
+    if (top + ph > window.scrollY + window.innerHeight - 8) top = rect.top + window.scrollY - ph - 4;
+    pop.style.left = `${Math.max(8, left)}px`;
+    pop.style.top = `${Math.max(8, top)}px`;
+    setTimeout(() => document.addEventListener("click", onThemeColorPickerDoc, true), 0);
+}
+
+function applyThemeAccentToParent(parentId, hex) {
+    const p = tasks.find((t) => String(t.id) === String(parentId) && isParentTask(t));
+    if (!p || isExternalTask(p)) return;
+    const n = normalizeThemeAccentHex(hex);
+    if (n) p.themeAccentColor = n;
+    else delete p.themeAccentColor;
+    save();
+    renderAll();
+}
+
 function pad3(n) {
     return String(n).padStart(3, "0");
 }
@@ -994,9 +1290,11 @@ window.onload = () => {
     bindHelpHoverListeners();
     applyPbpmTheme();
     syncTimelineRangeButtons();
-    // 初期表示はリストなので範囲ボタンは隠す
+    // 初期表示はリストなので範囲ボタン・実績修正は隠す
     const rangeGroup = document.querySelector('.timeline-range-group');
     if (rangeGroup) rangeGroup.style.display = 'none';
+    const btnPdcaInit = document.getElementById('btnPdcaActualEdit');
+    if (btnPdcaInit) btnPdcaInit.style.display = 'none';
     ensureDependencyFieldsIfNeeded();
     migrateTaskFieldsIfNeeded();
     migrateTaskCodesIfNeeded();
@@ -1014,6 +1312,13 @@ window.onload = () => {
     if (isOwnerIdUnsetForTutorial()) {
         requestAnimationFrame(() => openTutorialModal(true));
     }
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "visible") return;
+        pdcaActualEditMode = false;
+        syncPdcaActualEditButton();
+        const tv = document.getElementById("timelineView");
+        if (tv && tv.style.display !== "none") renderTimeline();
+    });
 };
 
 function scrollToTopSmooth() {
@@ -1560,6 +1865,8 @@ function importTemplate(event) {
 function openSettingsModal() {
     const modal = document.getElementById('settingsModal');
     if (!modal) return;
+    const verEl = document.getElementById('settingsAppVersionLine');
+    if (verEl) verEl.textContent = `PBPM バージョン ${PBPM_APP_VERSION}`;
     const t = document.getElementById('settingsTitle');
     const o = document.getElementById('settingsOwner');
     const oid = document.getElementById('settingsOwnerId');
@@ -1854,6 +2161,7 @@ function renderAll() {
         // 「完了」以外 且つ 期限が設定されている 且つ 今日より前
         const isExpired = task.status !== "完了" && deadlineDate && deadlineDate < today;
         const expiredClass = isExpired ? "expired" : "";
+        const scheduleSig = !isExpired ? getChildScheduleSignal(task, today) : null;
 
         // テーマごとに背景色を切り替え
         if (familyKey !== lastThemeRoot) {
@@ -1897,6 +2205,14 @@ function renderAll() {
         row.style.backgroundColor = useGrayBackground ? "var(--app-row-alt)" : "var(--app-row-base)";
 
         // 各種ボタンの準備
+        const accentHex = getThemeAccentForFamily(familyKey, displayRows);
+        const accentCss = accentHex || "#cfd8dc";
+        const canPickThemeColor = isParent && !isExt && !isLocked;
+        const colorBarBtn = `<button type="button" class="theme-color-bar-btn" style="background:${accentCss}" ${canPickThemeColor ? `onclick="openThemeColorPicker(event,${task.id})"` : "disabled"}${helpAttr("テーマ色：クリックで色を選べます（親テーマのみ）")} aria-label="テーマ色"></button>`;
+        const railLine = `<span class="theme-family-rail-line" aria-hidden="true"></span>`;
+        const gutterBlock = `<div class="task-row-gutter">${colorBarBtn}${railLine}</div>`;
+
+        const scheduleIconList = !isParent ? scheduleSignalIconHtml(scheduleSig, "list") : "";
         const checkboxHTML = isParent && !isExt
             ? `<input type="checkbox" class="row-check" onchange="updateDeleteButtonState()" style="transform: scale(1.2); cursor:pointer;"${helpAttr('行チェック：CSV出力・一括削除などの対象に含める（親行のみ）')}>`
             : `<span style="display:inline-block; width:20px;"></span>`;
@@ -1939,7 +2255,16 @@ function renderAll() {
         }
 
         // 3. HTMLの流し込み（箇条書きスタイル）
-        const col1 = `<td style="text-align:center;">${checkboxHTML}</td>`;
+        const progHint =
+            !isParent && task.progressUpdatedAt
+                ? `進捗更新日: ${task.progressUpdatedAt}。`
+                : !isParent && scheduleSig === "risk"
+                  ? "期間に対して進捗が遅れている可能性があります。"
+                  : !isParent && scheduleSig === "ahead"
+                    ? "計画より進捗が先行しています。"
+                    : "";
+        const statusTitleAttr = progHint ? ` title="${escapeHtmlAttr(progHint)}"` : "";
+        const col1 = `<td class="td-gutter-cell"><div class="gutter-cell-inner">${gutterBlock}<div class="gutter-check-slot">${scheduleIconList}${checkboxHTML}</div></div></td>`;
 
         const col2 = `<td>
             <select class="cat-select" ${(!isParent || isLocked) ? 'disabled' : ''} 
@@ -2077,7 +2402,7 @@ function renderAll() {
             ? "進捗：親タスクは「進行中」と「修正中」だけを切り替えます（未着手などからは一度「進行中」に入ります）"
             : "進捗：クリックのたびに 未着手→調査中→進行中→修正中→完了 の順で切り替わります";
         const col8 = `<td class="td-status">
-            <button class="status-btn status-${task.status}" ${isArchived || isExt ? 'disabled' : ''} onclick="cycleStatus(${task.id})"${helpAttr(statusHelp)}>${task.status}</button>
+            <button class="status-btn status-${task.status}" ${isArchived || isExt ? 'disabled' : ''} onclick="cycleStatus(${task.id})"${helpAttr(statusHelp)}${statusTitleAttr}>${task.status}</button>
         </td>`;
 
         const restoreBtn = (isArchived && !isParent && !isExt)
@@ -2118,11 +2443,15 @@ function switchView(viewName) {
     const btnL = document.getElementById('btnList');
     const btnT = document.getElementById('btnTimeline');
     const rangeGroup = document.querySelector('.timeline-range-group');
+    const btnPdca = document.getElementById('btnPdcaActualEdit');
 
     if (viewName === 'list') {
+        pdcaActualEditMode = false;
+        syncPdcaActualEditButton();
         listEl.style.display = 'block';
         timeEl.style.display = 'none';
         if (rangeGroup) rangeGroup.style.display = 'none';
+        if (btnPdca) btnPdca.style.display = 'none';
         if (btnL) {
             btnL.classList.add('view-btn-active');
             btnL.classList.remove('view-btn-inactive');
@@ -2135,6 +2464,7 @@ function switchView(viewName) {
         listEl.style.display = 'none';
         timeEl.style.display = 'block';
         if (rangeGroup) rangeGroup.style.display = 'inline-flex';
+        if (btnPdca) btnPdca.style.display = 'inline-flex';
         hideThemeOverflowTooltip();
         if (btnT) {
             btnT.classList.add('view-btn-active');
@@ -2413,6 +2743,8 @@ function renderTimeline() {
         const isCompleted = (task.status === "完了");
         const deadlineDateTl = task.deadline ? new Date(task.deadline) : null;
         const isExpiredTl = task.status !== "完了" && deadlineDateTl && deadlineDateTl < todayTl;
+        const scheduleSigTl = !isExpiredTl ? getChildScheduleSignal(task, todayTl) : null;
+        const accentTl = getThemeAccentForFamily(familyKey, tasks.concat(externalTasks));
         const toggleIcon = isCollapsedT ? "＋" : "－";
         const childCount = timelineTasks.filter(t => !t.archived && getTaskFamilyKey(t) === familyKey && !isParentTask(t)).length;
         const hasChildren = childCount > 0;
@@ -2426,7 +2758,7 @@ function renderTimeline() {
                 ? `<span class="accordion-btn" onclick="toggleTimelineAccordion('${task.id}'); event.stopPropagation();" style="margin-right:5px;"${helpAttr("アコーディオン（タイムライン）：子の行表示を開閉します")}>${toggleIcon}</span>${lockHtml}<strong>${rootName}${progressLabel}</strong>`
                 : `<span class="accordion-btn accordion-btn-disabled" style="margin-right:5px;"${helpAttr("アコーディオン：子タスクがないため開閉できません")}>＋</span>${lockHtml}<strong>${rootName}${progressLabel}</strong>`;
         } else {
-            labelHTML = `<span style="display:inline-block; width:22px;"></span>${getSecondaryStep(task) || "詳細未入力"}`;
+            labelHTML = `<span class="tl-label-child-row">${scheduleSignalIconHtml(scheduleSigTl, "tl")}<span class="tl-child-detail">${getSecondaryStep(task) || "詳細未入力"}</span></span>`;
         }
 
         const displayLabel = isParent
@@ -2472,7 +2804,7 @@ function renderTimeline() {
             rArea.classList.add('row-animate-in');
             hasAnimateIn = true;
         }
-        if (isCompleted) rArea.style.opacity = "0.8";
+        if (isCompleted) rArea.style.opacity = isParent ? "0.8" : "1";
 
         if (timelineSundayBg) {
             const sunLayer = document.createElement("div");
@@ -2505,31 +2837,232 @@ function renderTimeline() {
             // 【修正】最低でも1日分の幅を確保し、終了日が開始日より前にならないように計算
             const barWidth = Math.max(dayWidth, endX - startX + (s > startDate ? dayWidth : 0));
 
-            const bar = document.createElement('div');
-            bar.className = 'timeline-bar bar';
-            bar.dataset.id = task.id; // ★ここを追加：ツールチップが反応するようになります
+            const barBg =
+                accentTl ||
+                (isExt ? "#5c6bc0" : isParent ? "#4285f4" : "#4285f4");
+            const readOnlyBar = isExt || isParent;
+            const barBase = isExt ? "#5c6bc0" : barBg;
+
+            const bar = document.createElement("div");
+            bar.className = "timeline-bar bar";
+            bar.dataset.id = task.id;
             barElsById.set(task.id, bar);
-            bar.style.position = 'absolute';
+            bar.style.position = "absolute";
             bar.style.left = `${startX}px`;
             bar.style.width = `${barWidth}px`;
-            bar.style.height = '21.6px';
-            bar.style.top = '6.2px';
-            bar.style.background = '#4285f4';
-            bar.style.color = '#fff';
-            bar.style.fontSize = '10px';
-            bar.style.lineHeight = '21.6px';
-            bar.style.padding = '0 5px';
-            bar.style.borderRadius = '3px';
-            bar.style.zIndex = '5';
-            bar.style.overflow = 'hidden';
-            bar.innerText = displayLabel;
-            if (isExpiredTl) bar.classList.add('timeline-expired');
-            const readOnlyBar = isExt || isParent;
-            if (!readOnlyBar) {
-                bar.onmousedown = (e) => startDrag(e, task, bar);
-                bar.style.cursor = 'move';
+            bar.style.height = "21.6px";
+            bar.style.top = "6.2px";
+            bar.style.zIndex = "5";
+            bar.style.overflow = "visible";
+
+            if (isParent) {
+                bar.style.background = barBase;
+                bar.style.color = "#fff";
+                bar.style.fontSize = "10px";
+                bar.style.lineHeight = "21.6px";
+                bar.style.padding = "0 5px";
+                bar.style.borderRadius = "3px";
+                bar.style.overflow = "hidden";
+                bar.innerText = displayLabel;
             } else {
-                bar.style.cursor = 'default';
+                bar.classList.add("timeline-bar--pdca");
+                const gridStart = startDate;
+                const planSpan = timelinePixelSpanForRange(gridStart, dayWidth, getX, task.startDate, task.deadline);
+                const actS = getPdcaActualStartForDisplay(task);
+                const actE = getPdcaActualEndForDisplay(task, todayTl);
+                let wrapLeft = planSpan.startX;
+                let wrapWidth = planSpan.width;
+                let planRelLeft = 0;
+                let planRelW = planSpan.width;
+                let actRelLeft = 0;
+                let actRelW = 0;
+                let hasAct = false;
+                if (actS && actE && compareIsoDate(actS, actE) <= 0) {
+                    hasAct = true;
+                    const actSpan = timelinePixelSpanForRange(gridStart, dayWidth, getX, actS, actE);
+                    wrapLeft = Math.min(planSpan.startX, actSpan.startX);
+                    const wrapRight = Math.max(planSpan.startX + planSpan.width, actSpan.startX + actSpan.width);
+                    wrapWidth = Math.max(dayWidth, wrapRight - wrapLeft);
+                    planRelLeft = planSpan.startX - wrapLeft;
+                    planRelW = planSpan.width;
+                    actRelLeft = actSpan.startX - wrapLeft;
+                    actRelW = actSpan.width;
+                }
+
+                bar.style.left = `${wrapLeft}px`;
+                bar.style.width = `${wrapWidth}px`;
+                bar.dataset.planLeft = String(planRelLeft);
+                bar.dataset.planWidth = String(planRelW);
+
+                const planLayer = document.createElement("div");
+                planLayer.className = "timeline-bar-plan";
+                planLayer.style.cssText = [
+                    "position:absolute",
+                    `left:${planRelLeft}px`,
+                    `width:${planRelW}px`,
+                    "top:0",
+                    "height:100%",
+                    "box-sizing:border-box",
+                    `background:${hexToRgba(barBase, 0.16)}`,
+                    `border:2px dashed ${hexToRgba(barBase, 0.5)}`,
+                    "border-radius:3px",
+                    "pointer-events:none"
+                ].join(";");
+                bar.appendChild(planLayer);
+
+                let labelEl = document.createElement("div");
+                labelEl.className = "timeline-bar-label";
+                labelEl.textContent = displayLabel;
+
+                if (hasAct && task.deadline) {
+                    const planEnd = task.deadline;
+                    const nextAfterPlan = addCalendarDaysIso(planEnd, 1);
+                    let mS = actS;
+                    let mE = actE;
+                    let oS = null;
+                    let oE = null;
+                    if (compareIsoDate(actE, planEnd) > 0) {
+                        if (compareIsoDate(actS, planEnd) > 0) {
+                            mS = null;
+                            mE = null;
+                            oS = actS;
+                            oE = actE;
+                        } else {
+                            mE = planEnd;
+                            oS = nextAfterPlan;
+                            oE = actE;
+                            if (compareIsoDate(oS, oE) > 0) {
+                                oS = null;
+                                oE = null;
+                            }
+                        }
+                    }
+
+                    const hit = document.createElement("div");
+                    const canEditAct =
+                        pdcaActualEditMode && !readOnlyBar && task.status !== "完了";
+                    hit.className = "timeline-bar-exec-hit";
+                    hit.style.cssText = [
+                        "position:absolute",
+                        `left:${actRelLeft}px`,
+                        `width:${actRelW}px`,
+                        "top:0",
+                        "height:100%",
+                        "z-index:7",
+                        "box-sizing:border-box",
+                        canEditAct ? "pointer-events:auto;cursor:grab" : "pointer-events:none"
+                    ].join(";");
+
+                    const addSeg = (cls, bg, isoA, isoB, rad) => {
+                        if (!isoA || !isoB || compareIsoDate(isoA, isoB) > 0) return null;
+                        const sp = timelinePixelSpanForRange(gridStart, dayWidth, getX, isoA, isoB);
+                        const innerL = sp.startX - wrapLeft - actRelLeft;
+                        const el = document.createElement("div");
+                        el.className = cls;
+                        el.style.cssText = [
+                            "position:absolute",
+                            `left:${innerL}px`,
+                            `width:${sp.width}px`,
+                            "top:0",
+                            "height:100%",
+                            `background:${bg}`,
+                            "box-sizing:border-box",
+                            `border-radius:${rad}`,
+                            "pointer-events:none",
+                            "overflow:hidden"
+                        ].join(";");
+                        return el;
+                    };
+
+                    const mainEl =
+                        mS && mE
+                            ? addSeg(
+                                  "timeline-bar-exec-main",
+                                  barBase,
+                                  mS,
+                                  mE,
+                                  !oS && actRelW >= wrapWidth - 1 ? "3px" : "3px 0 0 3px"
+                              )
+                            : null;
+                    const overRad = mS && mE ? "0 3px 3px 0" : "3px";
+                    const overEl =
+                        oS && oE
+                            ? addSeg("timeline-bar-exec-over", "rgba(229, 115, 115, 0.92)", oS, oE, overRad)
+                            : null;
+                    if (overEl) {
+                        overEl.style.border = "1px solid rgba(198, 40, 40, 0.75)";
+                        overEl.style.background = "rgba(239, 154, 154, 0.95)";
+                    }
+                    if (mainEl) hit.appendChild(mainEl);
+                    if (overEl) hit.appendChild(overEl);
+                    bar.appendChild(hit);
+
+                    const execRight = actRelLeft + actRelW;
+                    const planRight = planRelLeft + planRelW;
+                    if (actRelW > 2 && execRight < planRight - 2) {
+                        const arrPlan = document.createElement("div");
+                        arrPlan.className = "timeline-pdca-arrow timeline-pdca-arrow--plan";
+                        arrPlan.innerHTML = `<span class="timeline-pdca-arrow-dash">┄┄</span><span class="timeline-pdca-arrow-head">›</span>`;
+                        arrPlan.style.left = `${execRight}px`;
+                        arrPlan.setAttribute("data-help", "計画区間へ（破線矢印）：この先は予定のみ未消化");
+                        bar.appendChild(arrPlan);
+                    }
+                }
+
+                labelEl.style.cssText = [
+                    "position:absolute",
+                    "left:0",
+                    "width:100%",
+                    "top:0",
+                    "height:100%",
+                    "box-sizing:border-box",
+                    "display:flex",
+                    "align-items:center",
+                    "padding:0 5px",
+                    "font-size:10px",
+                    "line-height:1.15",
+                    "white-space:nowrap",
+                    "overflow:hidden",
+                    "text-overflow:ellipsis",
+                    "pointer-events:none",
+                    "z-index:10",
+                    isCompleted
+                        ? "color:rgba(90,90,90,0.98);text-shadow:0 0 2px #fff,0 0 4px rgba(255,255,255,0.85)"
+                        : "color:#102027;text-shadow:0 0 2px #fff,0 0 5px rgba(255,255,255,0.95),0 1px 0 rgba(255,255,255,0.8)"
+                ].join(";");
+                bar.appendChild(labelEl);
+
+                const doneIsoSpark =
+                    task.status === "完了" &&
+                    String(task.progressUpdatedAt || "").trim() &&
+                    String(task.progressUpdatedAt).trim() <= task.deadline &&
+                    String(task.progressUpdatedAt).trim() >= (task.startDate || "")
+                        ? String(task.progressUpdatedAt).trim()
+                        : "";
+                if (doneIsoSpark && task.deadline && doneIsoSpark < task.deadline) {
+                    const doneDayLeft = getX(new Date(`${doneIsoSpark}T12:00:00`));
+                    const spark = document.createElement("div");
+                    spark.className = "timeline-bar-sparkle";
+                    spark.textContent = "✨";
+                    const sparkLeft = doneDayLeft - wrapLeft + dayWidth / 2;
+                    spark.style.cssText = `position:absolute;left:${sparkLeft}px;top:-4px;transform:translateX(-50%);font-size:12px;line-height:1;z-index:12;pointer-events:none;text-shadow:0 0 3px #fff,0 0 2px #000;`;
+                    spark.setAttribute("data-help", `期限内完了：完了日 ${doneIsoSpark}（右側は計画のみ表示）`);
+                    bar.appendChild(spark);
+                }
+            }
+
+            if (isExpiredTl) bar.classList.add("timeline-expired");
+            if (!readOnlyBar) {
+                bar.onmousedown = (e) => {
+                    if (!isParent && pdcaActualEditMode && e.target.closest(".timeline-bar-exec-hit")) {
+                        startPdcaActualBarDrag(e, task, bar);
+                        return;
+                    }
+                    startDrag(e, task, bar);
+                };
+                bar.style.cursor = !isParent && pdcaActualEditMode ? "default" : "move";
+            } else {
+                bar.style.cursor = "default";
             }
             bar.addEventListener("mouseenter", (evt) => {
                 if (!helpHoverOn) showTimelineTooltip(task, evt);
@@ -2540,9 +3073,9 @@ function renderTimeline() {
             bar.addEventListener("mouseleave", () => {
                 if (!isDraggingNow) hideTimelineTooltip();
             });
-            if (isCompleted) bar.style.opacity = "0.4";
+            if (isCompleted) bar.classList.add("timeline-bar--completed");
             if (isExt) {
-                bar.style.background = '#5c6bc0';
+                if (isParent) bar.style.background = "#5c6bc0";
                 bar.setAttribute("data-help", "タイムライン・バー（外部）：閲覧専用のためドラッグできません");
             } else if (isParent) {
                 bar.setAttribute(
@@ -2552,25 +3085,49 @@ function renderTimeline() {
             } else {
                 bar.setAttribute(
                     "data-help",
-                    "タイムライン・バー：ドラッグで期間全体を移動、右端の幅で納期を調整できます"
+                    "タイムライン・子バー：破線＝計画、実線の塗り＝実績（計画外はそのまま実線、納期超過分は薄赤）。ドラッグで計画ごと移動、実績修正ONで実績のみ移動／伸縮"
                 );
             }
 
-            // 右端ハンドル: 横幅(納期)調整（外部CSV・親は不可）
             if (!readOnlyBar) {
-                const resizeHandle = document.createElement('div');
-                resizeHandle.className = 'timeline-resize-handle';
-                resizeHandle.style.position = 'absolute';
-                resizeHandle.style.right = '0';
-                resizeHandle.style.top = '0';
-                resizeHandle.style.width = '8px';
-                resizeHandle.style.height = '100%';
-                resizeHandle.style.cursor = 'ew-resize';
-                resizeHandle.style.background = 'rgba(255,255,255,0.35)';
-                resizeHandle.setAttribute(
-                    "data-help",
-                    "納期ハンドル：右端をドラッグして納期（バーの長さ）だけ変更します"
-                );
+                const resizeHandle = document.createElement("div");
+                resizeHandle.className = "timeline-resize-handle";
+                resizeHandle.style.position = "absolute";
+                resizeHandle.style.top = "0";
+                resizeHandle.style.width = "8px";
+                resizeHandle.style.height = "100%";
+                resizeHandle.style.cursor = "ew-resize";
+                resizeHandle.style.background = "rgba(255,255,255,0.35)";
+                resizeHandle.style.zIndex = "10";
+                if (!isParent && bar.classList.contains("timeline-bar--pdca")) {
+                    const pl = parseFloat(bar.dataset.planLeft || "0");
+                    const pw = parseFloat(bar.dataset.planWidth || "0");
+                    const hit = bar.querySelector(".timeline-bar-exec-hit");
+                    if (pdcaActualEditMode && hit) {
+                        const actL = parseFloat(hit.style.left || "0");
+                        const actW = parseFloat(hit.style.width || "0");
+                        resizeHandle.style.left = `${actL + actW - 8}px`;
+                        resizeHandle.style.right = "auto";
+                        resizeHandle.setAttribute(
+                            "data-help",
+                            "実績ハンドル：実績の終了日だけを伸縮します（実績修正ON時）"
+                        );
+                    } else {
+                        resizeHandle.style.left = `${pl + pw - 8}px`;
+                        resizeHandle.style.right = "auto";
+                        resizeHandle.setAttribute(
+                            "data-help",
+                            "納期ハンドル：計画の納期を変更します"
+                        );
+                    }
+                } else {
+                    resizeHandle.style.right = "0";
+                    resizeHandle.style.left = "auto";
+                    resizeHandle.setAttribute(
+                        "data-help",
+                        "納期ハンドル：右端をドラッグして納期（バーの長さ）だけ変更します"
+                    );
+                }
                 resizeHandle.onmousedown = (evt) => {
                     evt.stopPropagation();
                     startResize(evt, task, bar);
@@ -2673,10 +3230,10 @@ function renderTimeline() {
             const p = prevEl.getBoundingClientRect();
             const c = curEl.getBoundingClientRect();
 
-            // SVGはwrapper content座標系に揃える
-            const x1 = p.right - wrapperRect.left + wrapper.scrollLeft;
+            // SVGはwrapper content座標系に揃える（子PDCAは計画バーの端）
+            const x1 = timelineDepBarEdgeClientX(prevEl, "right") - wrapperRect.left + wrapper.scrollLeft;
             const y1 = (p.top + p.height / 2) - wrapperRect.top + wrapper.scrollTop;
-            const x2 = c.left - wrapperRect.left + wrapper.scrollLeft;
+            const x2 = timelineDepBarEdgeClientX(curEl, "left") - wrapperRect.left + wrapper.scrollLeft;
             const y2 = (c.top + c.height / 2) - wrapperRect.top + wrapper.scrollTop;
 
             const path = document.createElementNS(svgNS, "path");
@@ -2726,6 +3283,76 @@ function renderTimeline() {
 //ドラッグ動作の制御ロジック
 let isDragging = false;
 
+function startPdcaActualBarDrag(e, task, bar) {
+    if (isExternalTask(task) || task.status === "完了") return;
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingNow = true;
+    const today0 = new Date();
+    today0.setHours(0, 0, 0, 0);
+    ensurePdcaActualSeedFromComputed(task, today0);
+    const origS = getPdcaActualStartForDisplay(task);
+    const origE = getPdcaActualEndForDisplay(task, today0);
+    if (!origS || !origE) {
+        isDraggingNow = false;
+        return;
+    }
+    const startClientX = e.clientX;
+    const dayW = 15;
+    const onMove = (ev) => {
+        const dDays = Math.round((ev.clientX - startClientX) / dayW);
+        task.pdcaActualStart = addCalendarDaysIso(origS, dDays);
+        task.pdcaActualEnd = addCalendarDaysIso(origE, dDays);
+        save();
+        scheduleRenderTimeline();
+        showTimelineTooltip(task, ev);
+    };
+    const onUp = () => {
+        isDraggingNow = false;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        renderAll();
+        hideTimelineTooltip();
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+}
+
+function startPdcaActualResize(e, task, bar) {
+    if (isExternalTask(task) || task.status === "完了") return;
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingNow = true;
+    const today0 = new Date();
+    today0.setHours(0, 0, 0, 0);
+    ensurePdcaActualSeedFromComputed(task, today0);
+    const origS = getPdcaActualStartForDisplay(task);
+    let origE = String(task.pdcaActualEnd || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(origE)) {
+        origE = getTimelinePdcaExecEndIso(task, today0) || origS;
+    }
+    const startClientX = e.clientX;
+    const dayW = 15;
+    const onMove = (ev) => {
+        const dDays = Math.round((ev.clientX - startClientX) / dayW);
+        let ne = addCalendarDaysIso(origE, dDays);
+        if (compareIsoDate(ne, origS) < 0) ne = origS;
+        task.pdcaActualEnd = ne;
+        save();
+        scheduleRenderTimeline();
+        showTimelineTooltip(task, ev);
+    };
+    const onUp = () => {
+        isDraggingNow = false;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        renderAll();
+        hideTimelineTooltip();
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+}
+
 function startDrag(e, task, bar) {
     // 親タスク、または「完了」ステータスのタスクはドラッグさせない
     if (isParentTask(task) || task.status === "完了" || isExternalTask(task)) return;
@@ -2738,6 +3365,8 @@ function startDrag(e, task, bar) {
     const originalStart = startBase ? new Date(startBase) : new Date();
     const originalEnd = endBase ? new Date(endBase) : new Date(originalStart);
     const durationDays = Math.max(0, Math.round((originalEnd - originalStart) / (1000 * 60 * 60 * 24)));
+    const origPdcaS = task.pdcaActualStart ? String(task.pdcaActualStart) : null;
+    const origPdcaE = task.pdcaActualEnd ? String(task.pdcaActualEnd) : null;
     const familyKey = getTaskFamilyKey(task);
     const depPrevDeadline = getDependencyPrevDeadlineMin(task);
     const minStartDate = depPrevDeadline ? new Date(depPrevDeadline) : null;
@@ -2774,6 +3403,8 @@ function startDrag(e, task, bar) {
         let previewStartStr = previewStart.toISOString().split('T')[0];
         task.startDate = previewStartStr;
         task.deadline = previewEnd.toISOString().split('T')[0];
+        if (origPdcaS) task.pdcaActualStart = addCalendarDaysIso(origPdcaS, previewDays);
+        if (origPdcaE) task.pdcaActualEnd = addCalendarDaysIso(origPdcaE, previewDays);
         reflectTaskDatesInList(task);
         syncParentDates(familyKey);
         save();
@@ -2796,6 +3427,8 @@ function startDrag(e, task, bar) {
             newEnd.setDate(originalEnd.getDate() + daysMoved);
             task.startDate = newStart.toISOString().split('T')[0];
             task.deadline = newEnd.toISOString().split('T')[0];
+            if (origPdcaS) task.pdcaActualStart = addCalendarDaysIso(origPdcaS, daysMoved);
+            if (origPdcaE) task.pdcaActualEnd = addCalendarDaysIso(origPdcaE, daysMoved);
             pushNextDependentTasks(task);
             // 子を動かしたら親も更新
             syncParentDates(familyKey);
@@ -2817,65 +3450,47 @@ function startDrag(e, task, bar) {
 
 function startResize(e, task, bar) {
     if (isParentTask(task) || task.status === "完了" || isExternalTask(task)) return;
+    if (pdcaActualEditMode && !isParentTask(task)) {
+        startPdcaActualResize(e, task, bar);
+        return;
+    }
     isDraggingNow = true;
     const startX = e.clientX;
-    const originalWidth = parseFloat(bar.style.width) || 15;
-    const baseStart = task.startDate || task.deadline || task.msDate;
-    const startDate = baseStart ? new Date(baseStart) : new Date();
+    const startIso = (task.startDate || "").trim();
+    const origDeadline = (task.deadline || "").trim();
     const markers = getMarkersMinMaxDate(task);
-    // リサイズ＝納期（右端）だけ変更。◇/★ が期間外に出ないよう、納期の最小値を底上げ
-    const minEndByMarkers =
-        markers.max ? dateToIsoLocal(markers.max) : "";
-    // YYYY-MM-DD は UTC 解釈→toISOString は安定。setHours を触ると前日ズレし得るので、着手は入力値を固定で使う
-    const startIso = (task.startDate || startDate.toISOString().split("T")[0]) || "";
+    const minEndByMarkers = markers.max ? dateToIsoLocal(markers.max) : "";
 
     const onMouseMove = (moveEvent) => {
-        const deltaX = moveEvent.clientX - startX;
-        const nextWidth = Math.max(15, originalWidth + deltaX);
-        bar.style.width = `${nextWidth}px`;
-        const addDays = Math.max(0, Math.round(nextWidth / 15) - 1);
-        const newDeadline = new Date(startDate);
-        newDeadline.setDate(startDate.getDate() + addDays);
+        const dDays = Math.round((moveEvent.clientX - startX) / 15);
+        let newDeadline = addCalendarDaysIso(origDeadline, dDays);
         const depPrevDeadline = getDependencyPrevDeadlineMin(task);
-        let newDeadlineStr = newDeadline.toISOString().split('T')[0];
-        if (depPrevDeadline && newDeadlineStr < depPrevDeadline) {
-            newDeadlineStr = depPrevDeadline;
-            const clamped = new Date(depPrevDeadline);
-            const diffDays = Math.round((clamped - startDate) / (1000 * 60 * 60 * 24));
-            const widthPx = Math.max(15, (diffDays + 1) * 15);
-            bar.style.width = `${widthPx}px`;
-        }
-        // ◇/★ が startDate より前にある場合、リサイズだけでは救えない（ドラッグで前に動かす必要）
+        if (depPrevDeadline && newDeadline < depPrevDeadline) newDeadline = depPrevDeadline;
+        if (startIso && newDeadline < startIso) newDeadline = startIso;
+        if (minEndByMarkers && newDeadline < minEndByMarkers) newDeadline = minEndByMarkers;
         if (markers.min && dateToIsoLocal(markers.min) < startIso) {
-            // 表示だけ崩れないようにしつつ、警告
             showToast("◇/★ が着手日より前です（バーを左へ動かして期間に入れてください）");
         }
-        if (minEndByMarkers && newDeadlineStr < minEndByMarkers) {
-            newDeadlineStr = minEndByMarkers;
-            const clamped = new Date(minEndByMarkers);
-            const diffDays = Math.round((clamped - startDate) / (1000 * 60 * 60 * 24));
-            const widthPx = Math.max(15, (diffDays + 1) * 15);
-            bar.style.width = `${widthPx}px`;
-        }
         task.startDate = startIso;
-        task.deadline = newDeadlineStr;
+        task.deadline = newDeadline;
         reflectTaskDatesInList(task);
         syncParentDates(getTaskFamilyKey(task));
         save();
+        scheduleRenderTimeline();
         showTimelineTooltip(task, moveEvent);
     };
 
     const onMouseUp = () => {
         isDraggingNow = false;
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
         pushNextDependentTasks(task);
         renderAll();
         hideTimelineTooltip();
     };
 
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
 }
 
 function reflectTaskDatesInList(task) {
@@ -3136,6 +3751,7 @@ function cycleStatus(id) {
     } else {
         const idx = statusList.indexOf(task.status);
         task.status = statusList[(idx + 1) % statusList.length];
+        task.progressUpdatedAt = dateToIsoLocal(new Date());
     }
     save(); renderAll();
 }
@@ -3655,9 +4271,14 @@ function exportCSV() {
 
     // BOMを付与してExcelの文字化けを防止
     // TargetFlag=イベント名 / TargetDate=イベント日
-    let csv = "\uFEFFOwnerID,タスクID,カテゴリ,PrimaryStep,FirstFlag,展開日,TargetFlag,TargetDate,SecondaryStep,着手日,納期,進捗,メモ,アーカイブ済,fFlag\n";
+    let csv = "\uFEFFOwnerID,タスクID,カテゴリ,PrimaryStep,FirstFlag,展開日,TargetFlag,TargetDate,SecondaryStep,着手日,納期,進捗,メモ,アーカイブ済,fFlag,テーマ色,進捗更新日,実績着手,実績納期\n";
 
     exportTargets.forEach(t => {
+        const isPar = isParentTask(t);
+        const themeCol = isPar ? normalizeThemeAccentHex(t.themeAccentColor) : "";
+        const progAt = !isPar && t.progressUpdatedAt ? t.progressUpdatedAt : "";
+        const pStart = !isPar && t.pdcaActualStart ? String(t.pdcaActualStart).trim() : "";
+        const pEnd = !isPar && t.pdcaActualEnd ? String(t.pdcaActualEnd).trim() : "";
         // カンマや改行が含まれても壊れないように各項目をダブルクォートで囲む
         const row = [
             ownerId,
@@ -3674,7 +4295,11 @@ function exportCSV() {
             t.status,
             (t.memo || '').replace(/"/g, '""').replace(/\n/g, ' '), // 改行はスペースに置換
             t.archived,
-            t.fFlag === true
+            t.fFlag === true,
+            themeCol,
+            progAt,
+            pStart,
+            pEnd
         ].map(v => `"${v}"`).join(",");
 
         csv += row + "\n";
@@ -3885,6 +4510,10 @@ function importCSV(event) {
                 const memo = pick(row, "メモ") || "";
                 const archived = parseBool(pick(row, "アーカイブ済"));
                 const fFlag = parseBool(pick(row, "fFlag"));
+                const themeAccent = pick(row, "テーマ色", "themeAccentColor") || "";
+                const progressUpdatedAt = pick(row, "進捗更新日", "progressUpdatedAt") || "";
+                const pdcaActualStart = pick(row, "実績着手", "pdcaActualStart") || "";
+                const pdcaActualEnd = pick(row, "実績納期", "pdcaActualEnd") || "";
 
                 rawRows.push({
                     __lineNo: i,
@@ -3901,7 +4530,11 @@ function importCSV(event) {
                     status,
                     memo,
                     archived,
-                    fFlag
+                    fFlag,
+                    themeAccent,
+                    progressUpdatedAt,
+                    pdcaActualStart,
+                    pdcaActualEnd
                 });
             }
 
@@ -3917,7 +4550,12 @@ function importCSV(event) {
                 const hasAnyCode = rows.some(r => r.taskCode);
                 if (hasAnyCode) {
                     rows.forEach(r => {
-                        imported.push({
+                        const isPar = String(r.taskCode || "").trim().endsWith("-000");
+                        const ta = normalizeThemeAccentHex(r.themeAccent);
+                        const pu = String(r.progressUpdatedAt || "").trim();
+                        const pas = String(r.pdcaActualStart || "").trim();
+                        const pae = String(r.pdcaActualEnd || "").trim();
+                        const rowObj = {
                             id: ts + r.__lineNo,
                             taskCode: r.taskCode,
                             category: r.category,
@@ -3936,7 +4574,12 @@ function importCSV(event) {
                             memo: r.memo,
                             archived: r.archived,
                             fFlag: r.fFlag
-                        });
+                        };
+                        if (isPar && ta) rowObj.themeAccentColor = ta;
+                        if (!isPar && pu) rowObj.progressUpdatedAt = pu;
+                        if (!isPar && /^\d{4}-\d{2}-\d{2}$/.test(pas)) rowObj.pdcaActualStart = pas;
+                        if (!isPar && /^\d{4}-\d{2}-\d{2}$/.test(pae)) rowObj.pdcaActualEnd = pae;
+                        imported.push(rowObj);
                     });
                     return;
                 }
@@ -3944,6 +4587,7 @@ function importCSV(event) {
                 const parentRow = rows.find(r => !String(r.SecondaryStep || "").trim()) || rows[0];
                 const parentCode = nextParentCode();
 
+                const parentTa = normalizeThemeAccentHex(parentRow.themeAccent);
                 imported.push({
                     id: ts + parentRow.__lineNo,
                     taskCode: parentCode,
@@ -3962,7 +4606,8 @@ function importCSV(event) {
                     status: parentRow.status || "未着手",
                     memo: parentRow.memo || "",
                     archived: parentRow.archived,
-                    fFlag: false
+                    fFlag: false,
+                    ...(parentTa ? { themeAccentColor: parentTa } : {})
                 });
 
                 const childRows = rows
@@ -3971,6 +4616,9 @@ function importCSV(event) {
 
                 childRows.forEach((r, idx) => {
                     const childCode = `${parentCode.split("-")[0]}-${pad3((idx + 1) * 10)}`;
+                    const cpu = String(r.progressUpdatedAt || "").trim();
+                    const pas = String(r.pdcaActualStart || "").trim();
+                    const pae = String(r.pdcaActualEnd || "").trim();
                     imported.push({
                         id: ts + r.__lineNo,
                         taskCode: childCode,
@@ -3989,7 +4637,10 @@ function importCSV(event) {
                         status: r.status || "未着手",
                         memo: r.memo || "",
                         archived: parentRow.archived,
-                        fFlag: false
+                        fFlag: false,
+                        ...(cpu ? { progressUpdatedAt: cpu } : {}),
+                        ...(/^\d{4}-\d{2}-\d{2}$/.test(pas) ? { pdcaActualStart: pas } : {}),
+                        ...(/^\d{4}-\d{2}-\d{2}$/.test(pae) ? { pdcaActualEnd: pae } : {})
                     });
                 });
             });

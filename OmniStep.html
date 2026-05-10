@@ -144,6 +144,9 @@
                 <button type="button" class="range-btn" data-months="9" onclick="setTimelineMonthRange(9)">9か月</button>
                 <button type="button" class="range-btn" data-months="12" onclick="setTimelineMonthRange(12)">12か月</button>
             </div>
+            <button type="button" id="btnPdcaActualEdit" class="btn-sub timeline-pdca-edit-btn" onclick="togglePdcaActualEditMode()"
+                style="display:none;" aria-pressed="false"
+                data-help="実績修正：ONのとき、子タスクの実績バーだけをドラッグで移動・右端で伸縮できます（計画の破線はそのまま）。リスト表示に戻すとOFFになります">実績修正</button>
         </div>
 
         <div id="listView">
@@ -221,7 +224,7 @@
                 <table id="taskTable">
                     <thead>
                         <tr>
-                            <th style="width: 40px; text-align: center;">
+                            <th style="width: 52px; text-align: center;" data-help="列・行選択とテーマ色バー：親のみチェック可。左の縦帯でテーマ色を変更できます">
                                 <input type="checkbox" id="checkAll" onchange="toggleAll(this.checked)"
                                     style="transform: scale(1.5); cursor: pointer;"
                                     data-help="全選択：表示中の親行チェックをまとめてON/OFFします">
@@ -393,6 +396,8 @@
                     data-help="カテゴリ枠：タブ名と非表示を1〜10枠まで設定します（空欄は既定名）"></div>
             </div>
 
+            <p id="settingsAppVersionLine" class="settings-app-version" role="status"
+                data-help="アプリの版：リポジトリで管理しているリリース番号です（問い合わせや手順書の記載に使えます）"></p>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top: 16px;">
                 <button class="btn-sub" type="button" onclick="closeSettingsModal()"
                     data-help="キャンセル：設定を保存せず閉じます">キャンセル</button>
