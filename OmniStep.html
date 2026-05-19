@@ -110,6 +110,9 @@
             Personal Business Project Manager
         </h1>
         <div class="header-right-group" style="display: flex; align-items: center; gap: 15px;">
+            <button type="button" id="btnExternalOwnerFilter" class="btn-secondary btn-external-owner-filter"
+                style="display:none;" onclick="toggleExternalOwnerFilter()"
+                data-help="取込みCSVの担当者IDの行だけを一覧・タイムラインに表示します">（担当者ID）のみ表示</button>
             <button class="btn-secondary" type="button" onclick="exportTemplate()"
                 data-help="テンプレート保存：タスク構成などをCSVテンプレートとして書き出します">テンプレート保存</button>
             <button class="btn-secondary" type="button" onclick="triggerTemplateImport()"
@@ -224,31 +227,33 @@
                 <table id="taskTable">
                     <thead>
                         <tr>
-                            <th style="width: 52px; text-align: center;" data-help="列・行選択とテーマ色バー：親のみチェック可。左の縦帯でテーマ色を変更できます">
+                            <th style="width: 56px; text-align: center;" data-help="列・行選択とテーマ色バー：親のみチェック可。子の▲▼は右端。左の縦帯でテーマ色を変更できます">
                                 <input type="checkbox" id="checkAll" onchange="toggleAll(this.checked)"
                                     style="transform: scale(1.5); cursor: pointer;"
                                     data-help="全選択：表示中の親行チェックをまとめてON/OFFします">
                             </th>
                             <th style="width: 100px;" data-help="列・カテゴリ：タスクの分類">カテゴリ</th>
-                            <th style="width: 300px;">
-                                <div class="sortable-header">
+                            <th style="width: 380px;" data-help="列・テーマ/課題：親はテーマ名・子は業務内容。右側に操作ボタン・連携チェック">
+                                <div class="sortable-header theme-header-with-bulk">
+                                    <button type="button" class="accordion-bulk-btn" id="btnAccordionBulk"
+                                        onclick="toggleAllThemeAccordions()" aria-label="すべての子タスク行を閉じる"
+                                        data-help="一括閉じる：すべてのテーマで子タスク行を隠します">⊖</button>
                                     <span>テーマ/課題</span>
                                     <button type="button" class="sort-btn" onclick="executeSort('theme')"
                                         data-help="並び替え（テーマ）：テーマ／課題名の順に並べ替えます">▼</button>
                                 </div>
                             </th>
-                            <th style="width: 110px;" data-help="列・FirstFlag：展開イベント（◇）とマイルストーン日">FirstFlag</th>
                             <th style="width: 110px;" data-help="列・TargetFlag：イベント（☆）と目標日">TargetFlag</th>
-                            <th data-help="列・業務内容：子の作業内容・連携チェック・親の操作ボタン">業務内容</th>
-                            <th style="width: 110px;">
+                            <th style="width: 118px;" class="th-date-col" data-help="列・着手：着手日（クリックで変更）">
                                 <div class="sortable-header">
-                                    <span>期間</span>
+                                    <span>着手</span>
                                     <button type="button" class="sort-btn" onclick="executeSort('date')"
-                                        data-help="並び替え（期間）：着手日を基準に並べ替えます">▼</button>
+                                        data-help="並び替え（着手）：着手日を基準に並べ替えます">▼</button>
                                 </div>
                             </th>
+                            <th style="width: 118px;" class="th-date-col" data-help="列・納期：納期（クリックで変更）">納期</th>
                             <th style="width: 90px;" data-help="列・進捗：親は進行中⇔修正中、子は全ステップを切り替えます">進捗</th>
-                            <th style="width: 50px;" data-help="列・操作：メモ・削除・復元">操作</th>
+                            <th style="width: 76px;" data-help="列・操作：メモ・中止・削除・復元">操作</th>
                         </tr>
                     </thead>
                     <tbody id="taskBody"></tbody>
@@ -397,7 +402,7 @@
             </div>
 
             <p id="settingsAppVersionLine" class="settings-app-version" role="status"
-                data-help="アプリの版：リポジトリで管理しているリリース番号です（問い合わせや手順書の記載に使えます）"></p>
+                data-help="アプリの版：クリックで版履歴（ver／内容／日時／修正者）を表示します"></p>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top: 16px;">
                 <button class="btn-sub" type="button" onclick="closeSettingsModal()"
                     data-help="キャンセル：設定を保存せず閉じます">キャンセル</button>
@@ -453,6 +458,18 @@
     <script src="OmniStep.js"></script>
 
     <div id="timeline-tooltip" class="tooltip-balloon" style="display: none;"></div>
+    <div id="versionHistoryModal" class="modal" style="display:none;" role="dialog" aria-modal="true"
+        aria-labelledby="versionHistoryModalTitle" aria-hidden="true"
+        onclick="if (event.target === this) closeVersionHistoryModal()">
+        <div class="modal-content version-history-modal-content" onclick="event.stopPropagation()">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <h3 id="versionHistoryModalTitle" style="margin:0;">版履歴</h3>
+                <button class="btn-sub" type="button" onclick="closeVersionHistoryModal()"
+                    data-help="閉じる：版履歴を閉じます">閉じる</button>
+            </div>
+            <div id="versionHistoryBody" class="version-history-body"></div>
+        </div>
+    </div>
     <div id="help-hover-tooltip" class="help-hover-tooltip" style="display: none;" aria-hidden="true"></div>
     <button id="scrollTopFloatingBtn" class="scroll-top-floating-btn btn-sub" type="button"
         onclick="scrollToTopSmooth()" style="display:none;" data-help="TOPへ移動する：リスト表示で上へスクロール戻しします">☝TOPへ移動する</button>

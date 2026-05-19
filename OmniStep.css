@@ -47,6 +47,7 @@
     --app-timeline-grid-line: #f0f0f0;
     /* タイムライン日曜帯（行エリアに重ねる。月見出し行には使わない） */
     --app-timeline-sunday-band: rgba(255, 190, 190, 0.14);
+    --app-timeline-sat-border: rgba(110, 110, 110, 0.5);
     --app-month-bar-bg: #f1f3f4;
     --app-memo-modal-bg: #fffef0;
     --app-gear-bg: #e0e0e0;
@@ -143,12 +144,32 @@ tr.expired .bar,
 }
 .gutter-check-slot {
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 4px;
     flex: 1;
     min-width: 0;
+    width: 100%;
+}
+
+.gutter-check-main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+}
+
+.gutter-order-row {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: auto;
+}
+
+.gutter-order-controls {
+    margin-left: 0;
 }
 
 .schedule-signal-icon {
@@ -175,6 +196,12 @@ tr.expired .bar,
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding-left: 1em;
+    font-weight: 500;
+}
+
+.sticky-label[data-parent="1"] .label-text strong {
+    font-weight: 700;
 }
 
 /* タイムライン PDCA（子）：計画＝薄色＋破線枠、実行＝実塗り */
@@ -649,13 +676,6 @@ th, td {
     box-sizing: border-box;
 }
 
-th {
-    background: var(--app-surface-muted);
-    color: var(--app-text);
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
 
 /*----------------------------------------------------------------------------------*/
 /*----------------------------------------------------------------------------------*/
@@ -745,6 +765,7 @@ button:disabled {
 
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th { background: var(--app-table-th-bg); color: var(--app-table-th-color); padding: 10px; font-size: 0.8rem; }
+
 td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; }
 
 .cat-select {
@@ -784,6 +805,7 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
 .status-進行中 { background-color: #2196f3; } /* ブルー */
 .status-修正中 { background-color: #ff9800; } /* オレンジ */
 .status-完了   { background-color: #4caf50; } /* グリーン */
+.status-中止   { background-color: #757575; color: #fff; }
 /* --- タイムライン構造 (重要修正箇所) --- */
 
 /* レイアウト：タイムライン（右側） */
@@ -976,7 +998,8 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
 }
 
 /* タイムライン：日曜の縦帯（統合ビュー・各行のチャートエリア内） */
-.timeline-sunday-layer {
+.timeline-sunday-layer,
+.timeline-saturday-layer {
     position: absolute;
     inset: 0;
     pointer-events: none;
@@ -1612,16 +1635,40 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     text-align: center;
 }
 
-/* 子タスク並び替え（▲▼） */
-.theme-cell {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+/* テーマ列（親＝テーマ名、子＝業務内容・操作は右寄せ） */
+.td-theme-col {
+    overflow: hidden;
+    vertical-align: top;
+    box-sizing: border-box;
 }
 
-.theme-cell-main {
-    flex: 1;
+.theme-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    width: 100%;
     min-width: 0;
+    min-height: calc(var(--row-height) - 6px);
+}
+
+.theme-cell-footer {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: auto;
+    flex: 0 0 auto;
+    width: 100%;
+}
+
+.theme-cell-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
 }
 
 .theme-top {
@@ -1629,6 +1676,7 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     align-items: center;
     gap: 6px;
     min-width: 0;
+    flex: 1 1 auto;
 }
 
 .theme-name {
@@ -1641,14 +1689,52 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     color: var(--app-text);
 }
 
+.theme-name--ellipsis-tip:focus {
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    text-overflow: clip;
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.45);
+    border-radius: 2px;
+    scrollbar-width: thin;
+}
+
+.theme-name-parent:focus {
+    white-space: normal;
+    overflow: auto;
+    text-overflow: clip;
+    max-height: 6.5em;
+}
+
+.theme-name-child {
+    padding-left: 1em;
+    font-weight: 600;
+    color: #555;
+}
+
+html[data-theme="dark"] .theme-name-child {
+    color: var(--app-text-muted);
+}
+
 .theme-meta {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 2px;
+    margin-top: 0;
     font-size: 0.72rem;
     color: var(--app-text-muted);
     line-height: 1.1;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.theme-meta--child {
+    justify-content: center;
+}
+
+.theme-meta--child .theme-code {
+    text-align: center;
 }
 
 .theme-code {
@@ -1659,12 +1745,12 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     color: var(--app-text-muted);
 }
 
-.parent-issue-controls {
+.parent-theme-controls {
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
+    justify-content: flex-end;
     gap: 6px;
-    width: 100%;
     box-sizing: border-box;
     overflow-x: auto;
     overflow-y: hidden;
@@ -1675,10 +1761,9 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
 .order-controls {
     display: inline-flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: center;
     justify-content: center;
     gap: 2px;
-    margin-left: auto;
     user-select: none;
 }
 
@@ -2286,6 +2371,7 @@ html[data-theme="dark"] {
     --app-timeline-month-open: #1e1e22;
     --app-timeline-grid-line: #3c4043;
     --app-timeline-sunday-band: rgba(220, 120, 120, 0.12);
+    --app-timeline-sat-border: rgba(160, 160, 160, 0.55);
     --app-month-bar-bg: #35363a;
     --app-memo-modal-bg: #2d2a22;
     --app-gear-bg: #3c4043;
@@ -2374,15 +2460,116 @@ html[data-theme="dark"] .theme-family-rail-line {
     width: 100%;
     max-width: 100%;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
+}
+
+.accordion-bulk-btn {
+    flex: 0 0 auto;
+    border: 1px solid var(--app-border-strong);
+    background: var(--app-surface-2);
+    color: var(--app-text);
+    border-radius: 4px;
+    width: 1.6rem;
+    height: 1.35rem;
+    padding: 0;
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.theme-header-with-bulk {
+    gap: 4px;
+}
+
+.theme-header-with-bulk .accordion-bulk-btn {
+    margin-right: 2px;
+}
+
+.btn-external-owner-filter.btn-external-filter-active {
+    background: var(--app-view-active-bg);
+    color: #fff;
+    border-color: var(--app-view-active-bg);
+}
+
+.settings-version-link {
+    border: none;
+    background: none;
+    color: var(--app-text-muted);
+    font-size: 0.85rem;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+}
+
+.settings-version-link:hover {
+    color: var(--app-text);
+}
+
+.version-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 0.85rem;
+}
+
+.version-history-table th,
+.version-history-table td {
+    border: 1px solid var(--app-border-light);
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.version-history-table th {
+    background: var(--app-surface-2);
+}
+
+.task-cancelled-mark {
+    color: #c62828;
+    font-weight: 700;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+
+.row-cancelled {
+    opacity: 0.88;
+}
+
+.td-action-col {
+    width: 76px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.memo-action-cell {
+    gap: 2px;
+}
+
+.memo-cancel-spacer {
+    width: 22px;
+    visibility: hidden;
+}
+
+.timeline-bar--cancelled::after {
+    content: "✕";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(198, 40, 40, 0.92);
+    pointer-events: none;
+    z-index: 6;
 }
 
 /* table-layout:fixed のとき可変列が 0 幅に落ちるのを防ぐ（横スクロールで全体を見られる） */
-/* 業務内容列の最小幅（親行のボタン帯）を含めた概算 */
+/* テーマ列の最小幅（親行のボタン帯）を含めた概算 */
 #taskTable {
-    min-width: 1240px;
-    width: max(100%, 1240px);
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 1100px;
+    width: max(100%, 1100px);
 }
 
 /* グローバル th,td の固定 height が効くと複数行セルが潰れる／flex+省略が不安定になる */
@@ -2392,34 +2579,70 @@ html[data-theme="dark"] .theme-family-rail-line {
     min-height: var(--row-height);
 }
 
-/* FirstFlag / TargetFlag：期間列（7列目）と同じ 110px に固定 */
+/* TargetFlag（4列目）・着手・納期（5–6列目） */
 #taskTable th:nth-child(4),
-#taskTable td:nth-child(4),
+#taskTable td:nth-child(4) {
+    width: 110px;
+    min-width: 110px;
+    max-width: 110px;
+    box-sizing: border-box;
+}
+
 #taskTable th:nth-child(5),
-#taskTable td:nth-child(5) {
-    width: 110px;
-    min-width: 110px;
-    max-width: 110px;
-    box-sizing: border-box;
-}
-
-#taskTable th:nth-child(7),
-#taskTable td:nth-child(7) {
-    width: 110px;
-    min-width: 110px;
-    max-width: 110px;
-    box-sizing: border-box;
-}
-
+#taskTable td:nth-child(5),
 #taskTable th:nth-child(6),
 #taskTable td:nth-child(6) {
-    /* A案：親行の「＋子」「期間リセット」「連携一括」等が列からはみ出しにくい幅 */
-    min-width: 320px;
-    width: 26%;
-    max-width: none;
+    width: 118px;
+    min-width: 118px;
+    max-width: 118px;
+    box-sizing: border-box;
 }
 
-#taskTable td.td-issue-col {
+.td-date-col {
+    vertical-align: middle;
+    text-align: center;
+    padding: 4px 3px !important;
+}
+
+.list-date-input {
+    width: 100%;
+    max-width: 100%;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--app-text);
+    box-sizing: border-box;
+    padding: 4px 2px;
+    min-height: 2rem;
+}
+
+.list-date-input:hover:not(:disabled) {
+    border-color: var(--app-border-light);
+    background: var(--app-surface);
+}
+
+.list-date-input:focus {
+    outline: none;
+    border-color: rgba(26, 115, 232, 0.55);
+    background: var(--app-surface);
+}
+
+.list-date-input:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+#taskTable th:nth-child(3),
+#taskTable td:nth-child(3) {
+    min-width: 360px;
+    width: 32%;
+    max-width: none;
+    box-sizing: border-box;
+}
+
+#taskTable td.td-theme-col {
     vertical-align: top;
 }
 
@@ -2486,8 +2709,8 @@ html[data-theme="dark"] .theme-family-rail-line {
 
     #taskTable th:nth-child(3),
     #taskTable td:nth-child(3) {
-        width: 220px;
-        min-width: 180px;
+        width: 280px;
+        min-width: 240px;
     }
 
     #taskTable th,
@@ -2498,7 +2721,7 @@ html[data-theme="dark"] .theme-family-rail-line {
         box-sizing: border-box;
     }
 
-    #taskTable td.td-issue-col {
+    #taskTable td.td-theme-col {
         overflow: hidden;
         vertical-align: top;
     }

@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.0.0 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.0.0";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.0 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.1.0";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -59,6 +59,21 @@ const ACCORDION_ROW_ANIM_IN_MS = Math.round(0.3 * 1000) + 25;
 const ACCORDION_ROW_ANIM_OUT_MS = Math.round(0.35 * 1000) + 25;
 
 const statusList = ["未着手", "調査中", "進行中", "修正中", "完了"];
+const TERMINAL_STATUSES = new Set(["完了", "中止"]);
+
+function isTerminalTaskStatus(status) {
+    return TERMINAL_STATUSES.has(status);
+}
+
+const LS_PBPM_VERSION_LOG = "pbpm_version_log";
+/** 版ごとの変更概要（リリース時に追記） */
+const PBPM_VERSION_CHANGELOG = {
+    "1.0.0": "初版リリース",
+    "1.1.0": "一覧UI刷新（テーマ/課題統合・着手/納期列・中止・版履歴・アコーディオン一括・外部CSV絞込・タイムライン/カレンダー改善）。スクロールは画面全体に統一。",
+};
+
+let externalOwnerFilterActive = false;
+let listAccordionBulkCollapsed = false;
 
 /** テーマ色パレット（親行のカラーバーから選択） */
 const THEME_ACCENT_PALETTE = [
@@ -140,13 +155,8 @@ function showHelpHoverTooltip(text, clientX, clientY) {
 }
 
 function onDocumentMouseMoveHelpHover(e) {
-    const truncTheme = e.target.closest(".theme-name.theme-name-parent");
+    const truncTheme = e.target.closest(".theme-name--ellipsis-tip");
     if (truncTheme && truncTheme.scrollWidth > truncTheme.clientWidth + 1) {
-        hideHelpHoverTooltip();
-        return;
-    }
-    const truncIssue = e.target.closest(".issue-text--ellipsis-tip");
-    if (truncIssue && truncIssue.scrollWidth > truncIssue.clientWidth + 1) {
         hideHelpHoverTooltip();
         return;
     }
@@ -210,18 +220,12 @@ function showThemeOverflowTooltip(text, clientX, clientY) {
     el.style.top = `${Math.max(6, y)}px`;
 }
 
-/** 一覧で省略表示中の要素（親テーマ名・業務内容）の全文ホバー（ヘルプとは別要素） */
+/** 一覧で省略表示中の要素（テーマ名・業務内容）の全文ホバー（ヘルプとは別要素） */
 function findListViewEllipsisOverflowTarget(e, listView) {
-    let el = e.target.closest(".theme-name.theme-name-parent");
+    let el = e.target.closest(".theme-name--ellipsis-tip");
     if (!el) {
         const under = document.elementFromPoint(e.clientX, e.clientY);
-        if (under && listView.contains(under)) el = under.closest(".theme-name.theme-name-parent");
-    }
-    if (el) return el;
-    el = e.target.closest(".issue-text--ellipsis-tip");
-    if (!el) {
-        const under = document.elementFromPoint(e.clientX, e.clientY);
-        if (under && listView.contains(under)) el = under.closest(".issue-text--ellipsis-tip");
+        if (under && listView.contains(under)) el = under.closest(".theme-name--ellipsis-tip");
     }
     return el || null;
 }
@@ -499,7 +503,7 @@ function getDependencyPrevDeadlineMin(task) {
 }
 
 function canEnableDependencyForChild(task) {
-    if (!task || isParentTask(task) || isExternalTask(task) || task.archived || task.status === "完了") return false;
+    if (!task || isParentTask(task) || isExternalTask(task) || task.archived || isTerminalTaskStatus(task.status)) return false;
     if (getTaskBranchNo(task) === "010") return false;
     // 既に期間が入っている場合のみ、矛盾チェックでONを拒否
     const prevDeadline = getPrevChildTask(task)?.deadline || "";
@@ -547,7 +551,7 @@ function staggerChildDatesFromParentBase(parentTask, baseDateStr) {
                 getTaskFamilyKey(t) === familyKey &&
                 !isParentTask(t) &&
                 !isExternalTask(t) &&
-                t.status !== "完了"
+                !isTerminalTaskStatus(t.status)
         )
         .sort((a, b) => parseInt(getTaskBranchNo(a), 10) - parseInt(getTaskBranchNo(b), 10));
     if (children.length === 0) return false;
@@ -711,7 +715,7 @@ function calendarInclusiveSpanDays(startIso, endIso) {
 
 /** 進捗状態を計画比較用のおおよその％に換算 */
 function statusToPlanPercent(status) {
-    const m = { 未着手: 0, 調査中: 10, 進行中: 45, 修正中: 75, 完了: 100 };
+    const m = { 未着手: 0, 調査中: 10, 進行中: 45, 修正中: 75, 完了: 100, 中止: 100 };
     return m[status] ?? 0;
 }
 
@@ -730,7 +734,7 @@ function getChildScheduleSignal(task, todayMidnight) {
     const st = new Date(`${task.startDate}T00:00:00`);
     st.setHours(0, 0, 0, 0);
 
-    if (task.status === "完了") {
+    if (isTerminalTaskStatus(task.status)) {
         const doneIso = String(task.progressUpdatedAt || "").trim();
         if (!doneIso || !task.deadline) return null;
         if (doneIso <= task.deadline) return "earlyDone";
@@ -784,7 +788,7 @@ function getTimelinePdcaExecEndIso(task, todayMidnight) {
     if (!task || isParentTask(task)) return null;
     if (!task.startDate || !task.deadline) return null;
     if (task.status === "未着手") return null;
-    if (task.status === "完了") {
+    if (isTerminalTaskStatus(task.status)) {
         const d = String(task.progressUpdatedAt || "").trim();
         if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d >= task.startDate && d <= task.deadline) return d;
         return task.deadline;
@@ -1004,7 +1008,7 @@ function clearTaskDependencies(taskIds) {
 function moveChildTask(childId, dir) {
     const child = tasks.find(t => String(t.id) === String(childId));
     if (!child || isParentTask(child) || child.archived || isExternalTask(child)) return;
-    if (child.status === "完了") return;
+    if (isTerminalTaskStatus(child.status)) return;
     const familyKey = getTaskFamilyKey(child);
     const children = getChildrenSortedByBranch(familyKey);
     const curIdx = children.findIndex(t => String(t.id) === String(childId));
@@ -1073,7 +1077,7 @@ function moveChildTask(childId, dir) {
 function toggleFamilyDependency(parentTaskId, checked) {
     const parent = tasks.find(t => String(t.id) === String(parentTaskId));
     if (!parent || !isParentTask(parent) || parent.archived) return;
-    if (parent.status === "完了") return;
+    if (parenisTerminalTaskStatus(t.status)) return;
     const familyKey = getTaskFamilyKey(parent);
     let blocked = 0;
     tasks.forEach(t => {
@@ -1081,7 +1085,7 @@ function toggleFamilyDependency(parentTaskId, checked) {
         if (getTaskFamilyKey(t) !== familyKey) return;
         if (isParentTask(t)) return;
         if (getTaskBranchNo(t) === "010") return; // 最初の子は対象外
-        if (t.status === "完了") return; // 完了はロック
+        if (isTerminalTaskStatus(t.status)) return; // 完了はロック
         if (!!checked && t.startDate && !canEnableDependencyForChild(t)) {
             blocked++;
             return;
@@ -1101,14 +1105,14 @@ function toggleFamilyDependency(parentTaskId, checked) {
 function toggleFamilyDependencyByButton(parentTaskId) {
     const parent = tasks.find(t => String(t.id) === String(parentTaskId));
     if (!parent || !isParentTask(parent) || parent.archived) return;
-    if (parent.status === "完了") return;
+    if (parenisTerminalTaskStatus(t.status)) return;
     const familyKey = getTaskFamilyKey(parent);
     const eligible = tasks.filter(t =>
         !t.archived &&
         getTaskFamilyKey(t) === familyKey &&
         !isParentTask(t) &&
         getTaskBranchNo(t) !== "010" &&
-        t.status !== "完了"
+        !isTerminalTaskStatus(t.status)
     );
     const allOn = eligible.length > 0 && eligible.every(t => !!t.fFlag);
     toggleFamilyDependency(parentTaskId, !allOn);
@@ -1281,6 +1285,185 @@ function toggleDarkMode() {
 }
 
 let externalTasks = []; // 外部CSV（閲覧専用・保存しない）
+
+function getExternalCsvOwnerId() {
+    const t = externalTasks.find((x) => x && x.__externalOwnerId);
+    return t ? String(t.__externalOwnerId).trim() : "";
+}
+
+function loadVersionLog() {
+    try {
+        const raw = localStorage.getItem(LS_PBPM_VERSION_LOG);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveVersionLog(log) {
+    localStorage.setItem(LS_PBPM_VERSION_LOG, JSON.stringify(log.slice(0, 80)));
+}
+
+function ensureVersionLogEntry() {
+    let log = loadVersionLog();
+    if (log.some((e) => e && e.ver === PBPM_APP_VERSION)) return;
+    log.unshift({
+        ver: PBPM_APP_VERSION,
+        content: PBPM_VERSION_CHANGELOG[PBPM_APP_VERSION] || "（変更内容未記載）",
+        datetime: new Date().toISOString(),
+        modifier: ownerName || "—",
+    });
+    saveVersionLog(log);
+}
+
+function formatVersionLogDatetime(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso);
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    const h = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${y}/${mo}/${da} ${h}:${mi}`;
+}
+
+function openVersionHistoryModal() {
+    ensureVersionLogEntry();
+    const modal = document.getElementById("versionHistoryModal");
+    const body = document.getElementById("versionHistoryBody");
+    if (!modal || !body) return;
+    const log = loadVersionLog();
+    if (!log.length) {
+        body.innerHTML = "<p style=\"margin:0;color:var(--app-text-muted);\">版履歴はまだありません。</p>";
+    } else {
+        let rows = "";
+        log.forEach((e) => {
+            rows += `<tr><td>${escapeHtml(e.ver || "")}</td><td>${escapeHtml(e.content || "")}</td><td>${escapeHtml(formatVersionLogDatetime(e.datetime))}</td><td>${escapeHtml(e.modifier || "—")}</td></tr>`;
+        });
+        body.innerHTML = `<table class="version-history-table"><thead><tr><th>ver</th><th>内容</th><th>日時</th><th>修正者</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    modal.style.display = "flex";
+    modal.setAttribute("aria-hidden", "false");
+    updateBodyScrollLock();
+}
+
+function closeVersionHistoryModal() {
+    const modal = document.getElementById("versionHistoryModal");
+    if (!modal) return;
+    modal.style.display = "none";
+    modal.setAttribute("aria-hidden", "true");
+    updateBodyScrollLock();
+}
+
+function syncExternalOwnerFilterButton() {
+    const btn = document.getElementById("btnExternalOwnerFilter");
+    if (!btn) return;
+    const oid = getExternalCsvOwnerId();
+    if (!oid || externalTasks.length === 0) {
+        btn.style.display = "none";
+        externalOwnerFilterActive = false;
+        btn.classList.remove("btn-external-filter-active");
+        return;
+    }
+    btn.style.display = "";
+    btn.textContent = `（${oid}）のみ表示`;
+    btn.setAttribute("aria-pressed", externalOwnerFilterActive ? "true" : "false");
+    btn.classList.toggle("btn-external-filter-active", externalOwnerFilterActive);
+}
+
+function toggleExternalOwnerFilter() {
+    if (!externalTasks.length) return;
+    externalOwnerFilterActive = !externalOwnerFilterActive;
+    syncExternalOwnerFilterButton();
+    renderAll();
+    if (typeof renderTimeline === "function") renderTimeline();
+    const oid = getExternalCsvOwnerId();
+    showToast(externalOwnerFilterActive ? `（${oid}）の行のみ表示中` : "通常表示に戻しました");
+}
+
+function getListFamiliesWithChildren(pool) {
+    const keys = new Set();
+    pool.filter((t) => isParentTask(t) && !t.archived).forEach((p) => {
+        const fk = getTaskFamilyKey(p);
+        const n = pool.filter((t) => !t.archived && getTaskFamilyKey(t) === fk && !isParentTask(t)).length;
+        if (n > 0) keys.add(fk);
+    });
+    return keys;
+}
+
+function updateListAccordionBulkStateFromCollapsed() {
+    const pool = tasks.filter((t) => !t.archived);
+    const families = getListFamiliesWithChildren(pool);
+    if (families.size === 0) {
+        listAccordionBulkCollapsed = false;
+    } else {
+        listAccordionBulkCollapsed = Array.from(families).every((fk) => collapsedThemes.includes(fk));
+    }
+    syncListAccordionBulkButton();
+}
+
+function syncListAccordionBulkButton() {
+    const btn = document.getElementById("btnAccordionBulk");
+    if (!btn) return;
+    const icon = listAccordionBulkCollapsed ? "⊕" : "⊖";
+    btn.textContent = icon;
+    btn.setAttribute(
+        "aria-label",
+        listAccordionBulkCollapsed ? "すべての子タスク行を開く" : "すべての子タスク行を閉じる"
+    );
+    btn.setAttribute(
+        "data-help",
+        listAccordionBulkCollapsed
+            ? "一括開く：すべてのテーマで子タスク行を表示します"
+            : "一括閉じる：すべてのテーマで子タスク行を隠します"
+    );
+}
+
+function toggleAllThemeAccordions() {
+    const pool = tasks.filter((t) => !t.archived);
+    const families = getListFamiliesWithChildren(pool);
+    if (families.size === 0) {
+        showToast("子タスクがあるテーマがありません");
+        return;
+    }
+    if (listAccordionBulkCollapsed) {
+        families.forEach((fk) => {
+            const i = collapsedThemes.indexOf(fk);
+            if (i !== -1) collapsedThemes.splice(i, 1);
+            const j = collapsedThemesTimeline.indexOf(fk);
+            if (j !== -1) collapsedThemesTimeline.splice(j, 1);
+        });
+        listAccordionBulkCollapsed = false;
+    } else {
+        families.forEach((fk) => {
+            if (!collapsedThemes.includes(fk)) collapsedThemes.push(fk);
+            if (!collapsedThemesTimeline.includes(fk)) collapsedThemesTimeline.push(fk);
+        });
+        listAccordionBulkCollapsed = true;
+    }
+    syncListAccordionBulkButton();
+    renderAll();
+    if (typeof renderTimeline === "function") renderTimeline();
+}
+
+function cancelTask(id) {
+    const task = tasks.find((t) => String(t.id) === String(id));
+    if (!task || isExternalTask(task) || task.archived) return;
+    if (isTerminalTaskStatus(task.status)) {
+        showToast("すでに完了または中止です");
+        return;
+    }
+    const label = isParentTask(task) ? getThemeLabel(task) : getSecondaryStep(task) || getDisplayTaskCode(task);
+    if (!confirm(`「${label}」を中止しますか？\n進捗は「中止」になり、完了と同様に履歴へ移動できます。`)) return;
+    task.status = "中止";
+    if (!isParentTask(task)) task.progressUpdatedAt = dateToIsoLocal(new Date());
+    save();
+    renderAll();
+    if (typeof renderTimeline === "function") renderTimeline();
+    showToast("中止にしました");
+}
 let currentTab = "すべて";
 let editingMemoId = null;
 
@@ -1324,6 +1507,7 @@ window.onload = () => {
 function scrollToTopSmooth() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
 
 function setupScrollTopButtons() {
     const onScroll = () => {
@@ -1866,7 +2050,7 @@ function openSettingsModal() {
     const modal = document.getElementById('settingsModal');
     if (!modal) return;
     const verEl = document.getElementById('settingsAppVersionLine');
-    if (verEl) verEl.textContent = `PBPM バージョン ${PBPM_APP_VERSION}`;
+    if (verEl) verEl.innerHTML = `<button type="button" class="settings-version-link" onclick="openVersionHistoryModal()">PBPM バージョン ${PBPM_APP_VERSION}</button>`;
     const t = document.getElementById('settingsTitle');
     const o = document.getElementById('settingsOwner');
     const oid = document.getElementById('settingsOwnerId');
@@ -1909,7 +2093,7 @@ const TUTORIAL_SECTIONS = [
     },
     {
         title: "3. 子タスクを追加",
-        html: "<p>一覧で親行の操作欄から子タスクを追加し、<strong>業務内容</strong>列に具体的な作業を入力します。枝番や順序の変更、依存連携（fFlag）で前後タスクとの整合も取れます。</p>",
+        html: "<p>一覧で親行の<strong>テーマ/課題</strong>列から子タスクを追加し、子行では同じ列に具体的な作業を入力します。左の▲▼で順序変更、依存連携（fFlag）で前後タスクとの整合も取れます。</p>",
     },
     {
         title: "4. 期間を入れる",
@@ -2110,7 +2294,7 @@ function renderAll() {
     }
 
     // 完了ボタンの状態更新
-    const hasCompleted = tasks.some(t => t.status === "完了" && !t.archived);
+    const hasCompleted = tasks.some(t => isTerminalTaskStatus(t.status) && !t.archived);
     const archiveBtn = document.getElementById('btnArchive');
     if (archiveBtn) {
         archiveBtn.disabled = !hasCompleted;
@@ -2128,7 +2312,13 @@ function renderAll() {
             ? externalTasks.filter(t => !t.archived)
             : externalTasks.filter(t => !t.archived && t.category === currentTab);
 
-    const displayRows = filtered.concat(externalFiltered);
+    let displayRows = filtered.concat(externalFiltered);
+    if (externalOwnerFilterActive && externalTasks.length > 0) {
+        displayRows = externalFiltered;
+    }
+
+    syncExternalOwnerFilterButton();
+    updateListAccordionBulkStateFromCollapsed();
 
     let lastThemeRoot = "";
     let useGrayBackground = false;
@@ -2142,7 +2332,7 @@ function renderAll() {
         const isParent = isParentTask(task);
         const isArchived = task.archived;
         const isExt = isExternalTask(task);
-        const isLocked = isArchived || task.status === "完了" || isExt;
+        const isLocked = isArchived || isTerminalTaskStatus(task.status) || isExt;
         const familyKey = getTaskFamilyKey(task);
         const branchNo = getTaskBranchNo(task);
         const depEligible = !isParent && branchNo !== "010";
@@ -2159,7 +2349,7 @@ function renderAll() {
         // ★追加：期限切れの判定ロジック
         const deadlineDate = task.deadline ? new Date(task.deadline) : null;
         // 「完了」以外 且つ 期限が設定されている 且つ 今日より前
-        const isExpired = task.status !== "完了" && deadlineDate && deadlineDate < today;
+        const isExpired = !isTerminalTaskStatus(task.status) && deadlineDate && deadlineDate < today;
         const expiredClass = isExpired ? "expired" : "";
         const scheduleSig = !isExpired ? getChildScheduleSignal(task, today) : null;
 
@@ -2179,13 +2369,17 @@ function renderAll() {
             const pool = isExt ? displayRows : tasks;
             const subTasks = pool.filter(t => !t.archived && getTaskFamilyKey(t) === familyKey && !isParentTask(t));
             if (subTasks.length > 0) {
-                const completedCount = subTasks.filter(t => t.status === "完了").length;
+                const completedCount = subTasks.filter(t => isTerminalTaskStatus(t.status)).length;
                 const percent = Math.round((completedCount / subTasks.length) * 100);
                 progressLabel = ` (${completedCount}/${subTasks.length}) ${percent}%`;
                 // 自動ステータス同期
                 if (!isExt) {
-                    if (percent === 100) task.status = "完了";
-                    else if (task.status === "完了") task.status = "進行中";
+                    if (percent === 100) {
+                        const allCancelled = subTasks.every((t) => t.status === "中止");
+                        task.status = allCancelled ? "中止" : "完了";
+                    } else if (isTerminalTaskStatus(task.status)) {
+                        task.status = "進行中";
+                    }
                 }
             }
         }
@@ -2196,6 +2390,7 @@ function renderAll() {
 
         // クラス付与の整理
         if (task.status === "完了") row.classList.add("row-completed");
+        if (task.status === "中止") row.classList.add("row-cancelled");
         if (isParent) row.classList.add("parent-row");
         if (isExpired) row.classList.add("expired"); // ★ここを追加：これで赤くなります
         if (!isParent && familyKey === lastExpandedListTheme) row.classList.add("row-animate-in");
@@ -2213,6 +2408,10 @@ function renderAll() {
         const gutterBlock = `<div class="task-row-gutter">${colorBarBtn}${railLine}</div>`;
 
         const scheduleIconList = !isParent ? scheduleSignalIconHtml(scheduleSig, "list") : "";
+        const cancelledMarkHtml =
+            task.status === "中止"
+                ? `<span class="task-cancelled-mark"${helpAttr("中止：このタスクは中止されています")}>✕</span>`
+                : "";
         const checkboxHTML = isParent && !isExt
             ? `<input type="checkbox" class="row-check" onchange="updateDeleteButtonState()" style="transform: scale(1.2); cursor:pointer;"${helpAttr('行チェック：CSV出力・一括削除などの対象に含める（親行のみ）')}>`
             : `<span style="display:inline-block; width:20px;"></span>`;
@@ -2226,8 +2425,6 @@ function renderAll() {
                 : `<span class="accordion-btn accordion-btn-disabled"${helpAttr('アコーディオン：子タスクがないため開閉できません')}>＋</span>`
             : `<span style="display:inline-block; width:25px;"></span>`;
 
-        const cellStyle = isParent ? "font-weight:bold;" : "padding-left: 25px; color: #555;";
-
         const addChildBtn = (isParent && !isExt)
             ? `<button class="add-child-btn" type="button" onclick="addSubTask('${task.id}')" style="font-size:10px; padding:2px 6px; cursor:pointer; vertical-align:middle;"${helpAttr('＋子タスク追加：この親テーマの下に新しい子タスクを追加します')}>＋子タスク追加</button>`
             : "";
@@ -2240,7 +2437,7 @@ function renderAll() {
             const sibIdx = siblings.findIndex(t => String(t.id) === String(task.id));
             const isFirst = sibIdx === 0;
             const isLast = sibIdx === siblings.length - 1;
-            const isDone = task.status === "完了";
+            const isDone = isTerminalTaskStatus(task.status);
             const upBtn = isDone
                 ? `<span class="order-btn order-btn-disabled"${helpAttr('順序▲：完了タスクは移動できません')}>▲</span>`
                 : isFirst
@@ -2251,7 +2448,7 @@ function renderAll() {
                 : isLast
                 ? `<span class="order-btn order-btn-disabled"${helpAttr('順序▼：これ以上下へは移動できません')}>▼</span>`
                 : `<span class="order-btn" onclick="moveChildTask('${task.id}','down')"${helpAttr('順序▼：同じテーマ内でこの子を一つ下へ移動します')}>▼</span>`;
-            orderBtns = `<span class="order-controls ${isDone ? "order-controls-disabled" : ""}">${upBtn}${downBtn}</span>`;
+            orderBtns = `<span class="order-controls gutter-order-controls ${isDone ? "order-controls-disabled" : ""}">${upBtn}${downBtn}</span>`;
         }
 
         // 3. HTMLの流し込み（箇条書きスタイル）
@@ -2264,7 +2461,7 @@ function renderAll() {
                     ? "計画より進捗が先行しています。"
                     : "";
         const statusTitleAttr = progHint ? ` title="${escapeHtmlAttr(progHint)}"` : "";
-        const col1 = `<td class="td-gutter-cell"><div class="gutter-cell-inner">${gutterBlock}<div class="gutter-check-slot">${scheduleIconList}${checkboxHTML}</div></div></td>`;
+        const col1 = `<td class="td-gutter-cell"><div class="gutter-cell-inner">${gutterBlock}<div class="gutter-check-slot"><div class="gutter-check-main">${scheduleIconList}${cancelledMarkHtml}${checkboxHTML}</div>${orderBtns ? `<div class="gutter-order-row">${orderBtns}</div>` : ""}</div></div></td>`;
 
         const col2 = `<td>
             <select class="cat-select" ${(!isParent || isLocked) ? 'disabled' : ''} 
@@ -2276,51 +2473,63 @@ function renderAll() {
         const extLockHtml = isExt
             ? `<span class="external-lock"${helpAttr('外部CSV：閲覧専用のため一覧からは編集できません')}>🔒</span>`
             : "";
-        const parentThemeHelp = isParent
+        const displayName = isParent ? getPrimaryStep(task) : getSecondaryStep(task);
+        const displayField = isParent ? "PrimaryStep" : "SecondaryStep";
+        const themeNameHelp = isParent
             ? helpAttr("テーマ名：親タスクのテーマ／課題の見出しを編集します")
+            : helpAttr("業務内容：子タスクの作業内容を編集します。はみ出しは省略し、ホバーで全文を表示します");
+        const themeNameClass = isParent
+            ? "theme-name theme-name-parent theme-name--ellipsis-tip"
+            : "theme-name theme-name-child theme-name--ellipsis-tip";
+        const themeMetaClass = isParent ? "theme-meta" : "theme-meta theme-meta--child";
+        const depChecked = !!task.fFlag;
+        const depCheckboxHtml = (depEligible && !isLocked)
+            ? `<input type="checkbox" class="dep-flag-input" ${depChecked ? "checked" : ""} onchange="updateTaskValue(${task.id}, 'fFlag', this.checked)"${helpAttr('依存連携：ONにすると直前の子の納期より前に期間が入らないよう前後が連携します')}>`
             : "";
-        const childThemeHelp = !isParent
-            ? helpAttr("表示名：子タスクのテーマ列に出す短い表示を編集します")
+        let parentDepToggleHtml = "";
+        if (isParent && !isLocked) {
+            const eligible = tasks.filter(t =>
+                !t.archived &&
+                getTaskFamilyKey(t) === familyKey &&
+                !isParentTask(t) &&
+                getTaskBranchNo(t) !== "010" &&
+                !isTerminalTaskStatus(t.status)
+            );
+            const anyEligible = eligible.length > 0;
+            const allOn = anyEligible && eligible.every(t => !!t.fFlag);
+            const label = allOn ? "連携一括OFF" : "連携一括ON";
+            parentDepToggleHtml = `<button class="dep-bulk-btn" type="button" onclick="toggleFamilyDependencyByButton('${task.id}')" ${anyEligible ? "" : "disabled"}${helpAttr('連携一括ON/OFF：依存連携の付いた子タスクへ、連携フラグをまとめてONまたはOFFにします')}>${label}</button>`;
+        }
+        const periodResetBtn = (isParent && !isLocked)
+            ? `<button class="dep-bulk-btn" type="button" onclick="resetFamilyPeriods('${task.id}')"${helpAttr('期間リセット：このテーマと編集可能な子タスクの着手日・納期をまとめてクリアします（確認あり）')}>期間リセット</button>`
             : "";
-        const themeNameClass = isParent ? "theme-name theme-name-parent" : "theme-name";
-        const col3 = `<td style="${cellStyle}">
+        const parentControlsHtml = (isParent && !isLocked)
+            ? `<span class="parent-theme-controls">${addChildBtn}${periodResetBtn}${parentDepToggleHtml}</span>`
+            : "";
+        const themeActionsHtml = isParent
+            ? parentControlsHtml
+            : depCheckboxHtml;
+        const col3 = `<td class="td-theme-col">
             <div class="theme-cell${isExt ? " external-task-row" : ""}">
-                <div class="theme-cell-main"${parentThemeHelp}>
-                    <div class="theme-top">
+                <div class="theme-top">
                         ${accordionBtn}
                         ${extLockHtml}
                         <span class="${themeNameClass}"
                               contenteditable="${!isLocked}"
-                              oninput="updateDataSilent(${task.id}, 'PrimaryStep', this.innerText)"
-                              onblur="renderAll()"${childThemeHelp}>${getPrimaryStep(task)}</span>
-                    </div>
-                    <div class="theme-meta">
-                        <span class="theme-code">[${getDisplayTaskCode(task)}]</span>
-                        <span class="theme-progress">${progressLabel}</span>
-                    </div>
+                              oninput="updateDataSilent(${task.id}, '${displayField}', this.innerText)"
+                              onblur="renderAll()"${themeNameHelp}>${displayName}</span>
                 </div>
-                ${orderBtns}
+                <div class="theme-cell-footer">
+                    <div class="${themeMetaClass}">
+                        <span class="theme-code">[${getDisplayTaskCode(task)}]</span>
+                        ${isParent ? `<span class="theme-progress">${progressLabel}</span>` : ""}
+                    </div>
+                    ${themeActionsHtml ? `<div class="theme-cell-actions">${themeActionsHtml}</div>` : ""}
+                </div>
             </div>
         </td>`;
 
         const col4 = `<td> 
-            <select class="cat-select" style="width:100%; font-weight:bold; border:none; background:transparent;" ${isLocked ? 'disabled' : ''} 
-                    onchange="updateTaskFromMaster(${task.id}, this.value)"${helpAttr('展開（FirstFlag）：年間マスターの展開イベントと◇マイルストーン日を選びます')}>
-                ${getMasterOptionsHTML(getFirstFlag(task))}
-            </select>
-            <span style="display:block;margin-top:2px;"${helpAttr('◇日付：マスターに日付がないときだけ、マイルストーン日を直接指定できます（クリックでカレンダー）')}>
-            <input type="date"
-                   value="${task.msDate || ''}"
-                   ${isLocked ? 'disabled' : ''}
-                   min="${msMin}"
-                   ${msMax ? `max="${msMax}"` : ""}
-                   title=""
-                   onchange="updateTaskValue(${task.id}, 'msDate', this.value)"
-                   style="font-size:0.75rem; border:none; background:transparent; width:100%; text-align:center;">
-            </span>
-        </td>`;
-
-        const col5 = `<td> 
             <select class="cat-select" style="width:100%; font-weight:bold; border:none; background:transparent;" ${isLocked ? 'disabled' : ''} 
                     onchange="updateTaskTargetFromMaster(${task.id}, this.value)"${helpAttr('イベント（TargetFlag）：年間マスターのイベント名と☆目標日を選びます')}>
                 ${getMasterOptionsHTML(getTargetName(task))}
@@ -2337,85 +2546,51 @@ function renderAll() {
             </span>
         </td>`;
 
-        const depChecked = !!task.fFlag;
-        const depCheckboxHtml = (depEligible && !isLocked)
-            ? `<input type="checkbox" class="dep-flag-input" ${depChecked ? "checked" : ""} onchange="updateTaskValue(${task.id}, 'fFlag', this.checked)"${helpAttr('依存連携：ONにすると直前の子の納期より前に期間が入らないよう前後が連携します')}>`
-            : '';
-        let parentDepToggleHtml = '';
-        if (isParent && !isLocked) {
-            const eligible = tasks.filter(t =>
-                !t.archived &&
-                getTaskFamilyKey(t) === familyKey &&
-                !isParentTask(t) &&
-                getTaskBranchNo(t) !== "010" &&
-                t.status !== "完了"
-            );
-            const anyEligible = eligible.length > 0;
-            const allOn = anyEligible && eligible.every(t => !!t.fFlag);
-            const label = allOn ? "連携一括OFF" : "連携一括ON";
-            parentDepToggleHtml = `<button class="dep-bulk-btn" type="button" onclick="toggleFamilyDependencyByButton('${task.id}')" ${anyEligible ? "" : "disabled"}${helpAttr('連携一括ON/OFF：依存連携の付いた子タスクへ、連携フラグをまとめてONまたはOFFにします')}>${label}</button>`;
-        }
-        const periodResetBtn = (isParent && !isLocked)
-            ? `<button class="dep-bulk-btn" type="button" onclick="resetFamilyPeriods('${task.id}')"${helpAttr('期間リセット：このテーマと編集可能な子タスクの着手日・納期をまとめてクリアします（確認あり）')}>期間リセット</button>`
-            : "";
-        const parentControlsHtml = (isParent && !isLocked)
-            ? `<span class="parent-issue-controls">${addChildBtn}${periodResetBtn}${parentDepToggleHtml}</span>`
-            : "";
-        const issueHelp = helpAttr(
-            "業務内容：親は上段がメモ・下段が操作。子は1行で編集。はみ出しは省略し、ホバーで全文を表示します（テーマ列と同様）"
-        );
-        const issueTextSpan = `<span class="issue-text issue-text--ellipsis-tip${
-            isParent ? " issue-text-parent" : " issue-text-child"
-        }" contenteditable="${!isLocked}"
-                      oninput="updateDataSilent(${task.id}, 'SecondaryStep', this.innerText)"
-                      onblur="renderAll()"${issueHelp}>${getSecondaryStep(task)}</span>`;
-        const col6Inner = isParent
-            ? `<div class="issue-cell-inner issue-cell-inner--parent">
-                <div class="issue-text-row">${issueTextSpan}</div>
-                <div class="issue-actions-row">${parentControlsHtml}</div>
-            </div>`
-            : `<div class="issue-cell-inner issue-cell-inner--child">
-                ${issueTextSpan}
-                ${depCheckboxHtml}
-            </div>`;
-        const col6 = `<td class="td-issue-col">${col6Inner}</td>`;
-
-        const col7Help = isParent
-            ? "期間：上が着手・下が納期。親の着手と納期がどちらも空のときに着手を入れると、子へ1日ずつ連番で入ります（クリックで日付変更）"
-            : "期間：上が着手日・下が納期。タイムラインのバーとも連動します（クリックで日付変更）";
-        const col7 = `<td>
-            <span style="display:flex;flex-direction:column;gap:2px;"${helpAttr(col7Help)}>
-                <input type="date" value="${task.startDate || ''}" ${isLocked ? 'disabled' : ''} 
-                       min="${startMin}"
-                       title=""
-                       onchange="updateTaskDate(${task.id}, 'startDate', this.value)"
-                       style="font-size:0.75rem; border:none; background:transparent;">
-                <input type="date" value="${task.deadline || ''}" ${isLocked ? 'disabled' : ''} 
-                       min="${deadlineMin}"
-                       title=""
-                       onchange="updateTaskDate(${task.id}, 'deadline', this.value)"
-                       style="font-size:0.75rem; border:none; background:transparent;">
-            </span>
+        const startDateHelp = isParent
+            ? "着手日：親の着手と納期がどちらも空のときに着手を入れると、子へ1日ずつ連番で入ります"
+            : "着手日：タイムラインのバーとも連動します";
+        const deadlineHelp = isParent
+            ? "納期：親テーマ全体の完了目安"
+            : "納期：この子タスクの完了予定日";
+        const col5 = `<td class="td-date-col td-date-start">
+            <input type="date" class="list-date-input" data-date-field="start"
+                   value="${task.startDate || ''}" ${isLocked ? 'disabled' : ''}
+                   min="${startMin}"
+                   title=""
+                   onchange="updateTaskDate(${task.id}, 'startDate', this.value)"
+                   ${helpAttr(startDateHelp)}>
+        </td>`;
+        const col6 = `<td class="td-date-col td-date-deadline">
+            <input type="date" class="list-date-input" data-date-field="deadline"
+                   value="${task.deadline || ''}" ${isLocked ? 'disabled' : ''}
+                   min="${deadlineMin}"
+                   title=""
+                   onchange="updateTaskDate(${task.id}, 'deadline', this.value)"
+                   ${helpAttr(deadlineHelp)}>
         </td>`;
 
         const statusHelp = isParent
             ? "進捗：親タスクは「進行中」と「修正中」だけを切り替えます（未着手などからは一度「進行中」に入ります）"
             : "進捗：クリックのたびに 未着手→調査中→進行中→修正中→完了 の順で切り替わります";
-        const col8 = `<td class="td-status">
+        const col7 = `<td class="td-status">
             <button class="status-btn status-${task.status}" ${isArchived || isExt ? 'disabled' : ''} onclick="cycleStatus(${task.id})"${helpAttr(statusHelp)}${statusTitleAttr}>${task.status}</button>
         </td>`;
 
         const restoreBtn = (isArchived && !isParent && !isExt)
             ? `<span class="memo-action-icon" onclick="restoreTask(${task.id})" style="cursor:pointer; color:#1a73e8;"${helpAttr('復元：押した子と親のステータスが「進行中」になり、このテーマを履歴から一覧へ戻します')}>↺</span>`
             : (isArchived ? `<span class="memo-action-icon" style="opacity:0.0; pointer-events:none;">↺</span>` : "");
-        const col9 = `<td style="width:60px; text-align:center;">
+        const cancelBtnHtml = (!isExt && !isArchived && !isTerminalTaskStatus(task.status))
+            ? `<span class="memo-action-icon memo-cancel-icon" onclick="cancelTask(${task.id})" style="cursor:pointer; color:#c62828;"${helpAttr("中止：このタスクを中止します（完了と同様に履歴へ移動できます）")}>⛔</span>`
+            : `<span class="memo-action-icon memo-cancel-spacer" aria-hidden="true"></span>`;
+        const col8 = `<td class="td-action-col">
             <div class="memo-action-cell">
                 <span class="memo-action-icon" onclick="openMemo(${task.id})" style="cursor:pointer; color:${(task.memo?.trim()) ? "#999" : "#1a73e8"};"${helpAttr('メモ：詳細メモの入力・編集ウィンドウを開きます')}>${(task.memo?.trim()) ? "📝" : "🖋"}</span>
+                ${cancelBtnHtml}
                 ${isExt ? `<span class="memo-action-icon" style="opacity:0.35; pointer-events:none;"${helpAttr('削除：外部CSV行はここから削除できません')}>🗑</span>` : (isArchived ? restoreBtn : `<span class="memo-action-icon" onclick="deleteTask(${task.id})" style="cursor:pointer; color:#999;"${helpAttr('削除：このタスクを削除します（親ならテーマごと）')}>🗑</span>`)}
             </div>
         </td>`;
 
-        row.innerHTML = col1 + col2 + col3 + col4 + col5 + col6 + col7 + col8 + col9;
+        row.innerHTML = col1 + col2 + col3 + col4 + col5 + col6 + col7 + col8;
     });
 
     // タイムライン同期
@@ -2628,7 +2803,7 @@ function renderTimeline() {
     corner.innerText = "業務内容";
     corner.style.width = `${labelWidth}px`;
     corner.style.minWidth = `${labelWidth}px`;
-    corner.setAttribute("data-help", "タイムライン左上：業務内容列の見出し（リスト左列と対応）");
+    corner.setAttribute("data-help", "タイムライン左上：テーマ/課題列の見出し（リスト左列と対応）");
     wrapper.appendChild(corner);
 
     const monthHeaderArea = document.createElement('div');
@@ -2698,6 +2873,30 @@ function renderTimeline() {
         }
         return rects;
     })();
+    const timelineSatRects = (() => {
+        const rects = [];
+        for (let mi = 0; mi < monthsCount; mi++) {
+            if (forcedCollapsedMonths.has(mi) || collapsedMonths.includes(mi)) continue;
+            const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + mi, 1);
+            const daysInMonth = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dt = new Date(mDate.getFullYear(), mDate.getMonth(), d);
+                if (dt.getDay() !== 6) continue;
+                rects.push({ left: getX(dt) });
+            }
+        }
+        return rects;
+    })();
+    const timelineSaturdayBorder =
+        timelineSatRects.length > 0
+            ? timelineSatRects
+                  .map(
+                      ({ left }) =>
+                          `linear-gradient(to right, transparent ${left}px, var(--app-timeline-sat-border) ${left}px, var(--app-timeline-sat-border) ${left + 2}px, transparent ${left + 2}px)`
+                  )
+                  .join(", ")
+            : "";
+
     const timelineSundayBg =
         timelineSunRects.length > 0
             ? timelineSunRects
@@ -2734,15 +2933,16 @@ function renderTimeline() {
             const pool = isExt ? timelineTasks : tasks;
             const subTasks = pool.filter(t => !t.archived && getTaskFamilyKey(t) === familyKey && !isParentTask(t));
             if (subTasks.length > 0) {
-                const completedCount = subTasks.filter(t => t.status === "完了").length;
+                const completedCount = subTasks.filter(t => isTerminalTaskStatus(t.status)).length;
                 const percent = Math.round((completedCount / subTasks.length) * 100);
                 progressLabel = ` (${completedCount}/${subTasks.length}) ${percent}%`;
             }
         }
 
-        const isCompleted = (task.status === "完了");
+        const isCompleted = isTerminalTaskStatus(task.status);
+        const isCancelled = task.status === "中止";
         const deadlineDateTl = task.deadline ? new Date(task.deadline) : null;
-        const isExpiredTl = task.status !== "完了" && deadlineDateTl && deadlineDateTl < todayTl;
+        const isExpiredTl = !isTerminalTaskStatus(task.status) && deadlineDateTl && deadlineDateTl < todayTl;
         const scheduleSigTl = !isExpiredTl ? getChildScheduleSignal(task, todayTl) : null;
         const accentTl = getThemeAccentForFamily(familyKey, tasks.concat(externalTasks));
         const toggleIcon = isCollapsedT ? "＋" : "－";
@@ -2758,7 +2958,7 @@ function renderTimeline() {
                 ? `<span class="accordion-btn" onclick="toggleTimelineAccordion('${task.id}'); event.stopPropagation();" style="margin-right:5px;"${helpAttr("アコーディオン（タイムライン）：子の行表示を開閉します")}>${toggleIcon}</span>${lockHtml}<strong>${rootName}${progressLabel}</strong>`
                 : `<span class="accordion-btn accordion-btn-disabled" style="margin-right:5px;"${helpAttr("アコーディオン：子タスクがないため開閉できません")}>＋</span>${lockHtml}<strong>${rootName}${progressLabel}</strong>`;
         } else {
-            labelHTML = `<span class="tl-label-child-row">${scheduleSignalIconHtml(scheduleSigTl, "tl")}<span class="tl-child-detail">${getSecondaryStep(task) || "詳細未入力"}</span></span>`;
+            labelHTML = `<span class="tl-label-child-row"><span class="tl-child-detail">${getSecondaryStep(task) || "詳細未入力"}</span>${scheduleSignalIconHtml(scheduleSigTl, "tl")}</span>`;
         }
 
         const displayLabel = isParent
@@ -2813,6 +3013,13 @@ function renderTimeline() {
             rArea.appendChild(sunLayer);
         }
 
+        if (timelineSaturdayBorder) {
+            const satLayer = document.createElement("div");
+            satLayer.className = "timeline-saturday-layer";
+            satLayer.style.background = timelineSaturdayBorder;
+            rArea.appendChild(satLayer);
+        }
+
         // 今日ライン
         const todayX = getX(now);
         const todayLine = document.createElement('div');
@@ -2844,7 +3051,7 @@ function renderTimeline() {
             const barBase = isExt ? "#5c6bc0" : barBg;
 
             const bar = document.createElement("div");
-            bar.className = "timeline-bar bar";
+            bar.className = "timeline-bar bar" + (isCancelled ? " timeline-bar--cancelled" : "");
             bar.dataset.id = task.id;
             barElsById.set(task.id, bar);
             bar.style.position = "absolute";
@@ -2940,7 +3147,7 @@ function renderTimeline() {
 
                     const hit = document.createElement("div");
                     const canEditAct =
-                        pdcaActualEditMode && !readOnlyBar && task.status !== "完了";
+                        pdcaActualEditMode && !readOnlyBar && !isTerminalTaskStatus(task.status);
                     hit.className = "timeline-bar-exec-hit";
                     hit.style.cssText = [
                         "position:absolute",
@@ -3033,7 +3240,7 @@ function renderTimeline() {
                 bar.appendChild(labelEl);
 
                 const doneIsoSpark =
-                    task.status === "完了" &&
+                    isTerminalTaskStatus(task.status) &&
                     String(task.progressUpdatedAt || "").trim() &&
                     String(task.progressUpdatedAt).trim() <= task.deadline &&
                     String(task.progressUpdatedAt).trim() >= (task.startDate || "")
@@ -3284,7 +3491,7 @@ function renderTimeline() {
 let isDragging = false;
 
 function startPdcaActualBarDrag(e, task, bar) {
-    if (isExternalTask(task) || task.status === "完了") return;
+    if (isExternalTask(task) || isTerminalTaskStatus(task.status)) return;
     e.preventDefault();
     e.stopPropagation();
     isDraggingNow = true;
@@ -3319,7 +3526,7 @@ function startPdcaActualBarDrag(e, task, bar) {
 }
 
 function startPdcaActualResize(e, task, bar) {
-    if (isExternalTask(task) || task.status === "完了") return;
+    if (isExternalTask(task) || isTerminalTaskStatus(task.status)) return;
     e.preventDefault();
     e.stopPropagation();
     isDraggingNow = true;
@@ -3355,7 +3562,7 @@ function startPdcaActualResize(e, task, bar) {
 
 function startDrag(e, task, bar) {
     // 親タスク、または「完了」ステータスのタスクはドラッグさせない
-    if (isParentTask(task) || task.status === "完了" || isExternalTask(task)) return;
+    if (isParentTask(task) || isTerminalTaskStatus(task.status) || isExternalTask(task)) return;
 
     isDraggingNow = true;
     const startX = e.clientX;
@@ -3449,7 +3656,7 @@ function startDrag(e, task, bar) {
 }
 
 function startResize(e, task, bar) {
-    if (isParentTask(task) || task.status === "完了" || isExternalTask(task)) return;
+    if (isParentTask(task) || isTerminalTaskStatus(task.status) || isExternalTask(task)) return;
     if (pdcaActualEditMode && !isParentTask(task)) {
         startPdcaActualResize(e, task, bar);
         return;
@@ -3496,9 +3703,10 @@ function startResize(e, task, bar) {
 function reflectTaskDatesInList(task) {
     const row = document.querySelector(`#taskBody tr[data-id="${task.id}"]`);
     if (!row) return;
-    const dateInputs = row.querySelectorAll('td:nth-child(7) input[type="date"]');
-    if (dateInputs[0]) dateInputs[0].value = task.startDate || "";
-    if (dateInputs[1]) dateInputs[1].value = task.deadline || "";
+    const startIn = row.querySelector('input[data-date-field="start"]');
+    const endIn = row.querySelector('input[data-date-field="deadline"]');
+    if (startIn) startIn.value = task.startDate || "";
+    if (endIn) endIn.value = task.deadline || "";
 }
 
 function syncParentDates(familyKey) {
@@ -3532,7 +3740,7 @@ function updateTaskValue(taskId, field, value) {
             renderAll();
             return;
         }
-        const isLocked = task.archived || task.status === "完了";
+        const isLocked = task.archived || isTerminalTaskStatus(task.status);
         // 完了/アーカイブは「進捗・メモ以外」をロック
         if (isLocked && !["status", "memo"].includes(field)) {
             showToast("完了タスクは進捗・メモ以外は編集できません");
@@ -3654,7 +3862,7 @@ function updateTaskDate(id, field, value) {
             renderAll();
             return;
         }
-        const isLocked = task.archived || task.status === "完了";
+        const isLocked = task.archived || isTerminalTaskStatus(task.status);
         if (isLocked) {
             showToast("完了タスクは進捗・メモ以外は編集できません");
             renderAll();
@@ -3715,7 +3923,7 @@ function updateTaskDate(id, field, value) {
 function resetFamilyPeriods(parentId) {
     const parent = tasks.find((t) => String(t.id) === String(parentId));
     if (!parent || !isParentTask(parent) || isExternalTask(parent)) return;
-    if (parent.archived || parent.status === "完了") {
+    if (parent.archived || parenisTerminalTaskStatus(t.status)) {
         showToast("完了または履歴のテーマは期間リセットできません");
         return;
     }
@@ -3731,7 +3939,7 @@ function resetFamilyPeriods(parentId) {
     tasks.forEach((t) => {
         if (getTaskFamilyKey(t) !== familyKey) return;
         if (isExternalTask(t)) return;
-        if (t.archived || t.status === "完了") return;
+        if (t.archived || isTerminalTaskStatus(t.status)) return;
         t.startDate = "";
         t.deadline = "";
     });
@@ -3927,13 +4135,13 @@ function sortTasks() {
 function archiveCompletedTasks() {
     // 1. 現在表示されている（未アーカイブの）親タスクの中で「完了」のものを抽出
     const completedParents = tasks
-        .filter(t => isParentTask(t) && t.status === "完了" && !t.archived)
+        .filter(t => isParentTask(t) && isTerminalTaskStatus(t.status) && !t.archived)
         .map(t => ({ family: getTaskFamilyKey(t), id: t.taskCode || "-", name: getThemeLabel(t) }));
 
     const completedParentRoots = completedParents.map(t => t.family);
 
     if (completedParentRoots.length === 0) {
-        showToast("完了(100%)したテーマがないため、移動できません");
+        showToast("完了または中止のテーマがないため、移動できません");
         return;
     }
 
@@ -4697,6 +4905,8 @@ function importCSV(event) {
                 };
             });
             showToast(`外部CSV（${incomingOwner}）を表示中（閲覧専用）`);
+            externalOwnerFilterActive = false;
+            syncExternalOwnerFilterButton();
             renderAll();
             event.target.value = "";
             return;
@@ -4748,7 +4958,7 @@ function importCSV(event) {
             if (tasks.some(t => String(t.taskCode) === parentCode)) return;
 
             const allArchived = children.every(t => t.archived === true);
-            const allDone = children.length > 0 && children.every(t => t.status === "完了");
+            const allDone = children.length > 0 && children.every(t => isTerminalTaskStatus(t.status));
             const parent = {
                 id: Date.now() + Math.floor(Math.random() * 10000),
                 taskCode: parentCode,
@@ -4831,7 +5041,7 @@ function updateDataSilent(id, field, value) {
     const task = tasks.find(t => t.id === id);
     if (task) {
         if (isExternalTask(task)) return;
-        const isLocked = task.archived || task.status === "完了";
+        const isLocked = task.archived || isTerminalTaskStatus(task.status);
         if (isLocked && !["status", "memo"].includes(field)) return;
         if (field === "PrimaryStep" || field === "content") setPrimaryStep(task, value);
         else if (field === "SecondaryStep" || field === "issue") setSecondaryStep(task, value);
@@ -4941,6 +5151,7 @@ function toggleAccordion(parentTaskId) {
     }
     
     renderAll(); // リスト再描画
+    updateListAccordionBulkStateFromCollapsed();
 
     // 展開（開く）した時だけ、その場所までスクロール
     if (index !== -1) {
