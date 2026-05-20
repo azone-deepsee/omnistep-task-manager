@@ -235,23 +235,23 @@
                             <th style="width: 100px;" data-help="列・カテゴリ：タスクの分類">カテゴリ</th>
                             <th style="width: 380px;" data-help="列・テーマ/課題：親はテーマ名・子は業務内容。右側に操作ボタン・連携チェック">
                                 <div class="sortable-header theme-header-with-bulk">
-                                    <button type="button" class="accordion-bulk-btn" id="btnAccordionBulk"
+                                    <span class="accordion-btn accordion-bulk-btn" id="btnAccordionBulk" role="button" tabindex="0"
                                         onclick="toggleAllThemeAccordions()" aria-label="すべての子タスク行を閉じる"
-                                        data-help="一括閉じる：すべてのテーマで子タスク行を隠します">⊖</button>
+                                        data-help="一括閉じる：すべてのテーマで子タスク行を隠します">－</span>
                                     <span>テーマ/課題</span>
                                     <button type="button" class="sort-btn" onclick="executeSort('theme')"
                                         data-help="並び替え（テーマ）：テーマ／課題名の順に並べ替えます">▼</button>
                                 </div>
                             </th>
                             <th style="width: 110px;" data-help="列・TargetFlag：イベント（☆）と目標日">TargetFlag</th>
-                            <th style="width: 118px;" class="th-date-col" data-help="列・着手：着手日（クリックで変更）">
+                            <th style="width: 80px;" class="th-date-col" data-help="列・着手：着手日（クリックで変更）">
                                 <div class="sortable-header">
                                     <span>着手</span>
                                     <button type="button" class="sort-btn" onclick="executeSort('date')"
                                         data-help="並び替え（着手）：着手日を基準に並べ替えます">▼</button>
                                 </div>
                             </th>
-                            <th style="width: 118px;" class="th-date-col" data-help="列・納期：納期（クリックで変更）">納期</th>
+                            <th style="width: 80px;" class="th-date-col" data-help="列・納期：納期（クリックで変更）">納期</th>
                             <th style="width: 90px;" data-help="列・進捗：親は進行中⇔修正中、子は全ステップを切り替えます">進捗</th>
                             <th style="width: 76px;" data-help="列・操作：メモ・中止・削除・復元">操作</th>
                         </tr>

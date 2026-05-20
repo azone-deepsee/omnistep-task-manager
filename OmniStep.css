@@ -183,6 +183,12 @@ tr.expired .bar,
     font-size: 13px;
     margin-right: 2px;
 }
+
+.schedule-signal-icon--cancelled {
+    color: #c62828;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
 .tl-label-child-row {
     display: inline-flex;
     align-items: center;
@@ -1599,6 +1605,14 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     flex-shrink: 0;
 }
 
+.dep-flag-spacer {
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    flex: 0 0 15px;
+    flex-shrink: 0;
+}
+
 /* 親タスク：連携一括ボタン */
 .dep-bulk-btn {
     flex: 0 0 auto;
@@ -1669,6 +1683,7 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
+    min-width: 15px;
 }
 
 .theme-top {
@@ -1731,10 +1746,12 @@ html[data-theme="dark"] .theme-name-child {
 
 .theme-meta--child {
     justify-content: center;
+    flex: 1 1 auto;
 }
 
 .theme-meta--child .theme-code {
     text-align: center;
+    width: 100%;
 }
 
 .theme-code {
@@ -1924,6 +1941,13 @@ html[data-theme="dark"] .theme-name-child {
     animation: slideUp var(--accordion-row-duration-out) ease-in forwards;
     overflow: hidden;
     transform-origin: top;
+}
+
+#taskTable tbody tr.row-reorder-anim {
+    transition: transform 0.35s ease-in-out;
+    position: relative;
+    z-index: 3;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 @keyframes slideDown {
@@ -2464,20 +2488,11 @@ html[data-theme="dark"] .theme-family-rail-line {
 
 .accordion-bulk-btn {
     flex: 0 0 auto;
-    border: 1px solid var(--app-border-strong);
-    background: var(--app-surface-2);
-    color: var(--app-text);
-    border-radius: 4px;
-    width: 1.6rem;
-    height: 1.35rem;
-    padding: 0;
-    font-size: 0.95rem;
-    line-height: 1;
-    cursor: pointer;
 }
 
 .theme-header-with-bulk {
     gap: 4px;
+    align-items: center;
 }
 
 .theme-header-with-bulk .accordion-bulk-btn {
@@ -2523,6 +2538,28 @@ html[data-theme="dark"] .theme-family-rail-line {
     background: var(--app-surface-2);
 }
 
+.version-history-col-ver {
+    width: 10%;
+}
+
+.version-history-col-content {
+    width: 42%;
+}
+
+.version-history-col-datetime {
+    width: 22%;
+}
+
+.version-history-col-modifier {
+    width: 16%;
+}
+
+.version-history-table td:nth-child(2) {
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.45;
+}
+
 .task-cancelled-mark {
     color: #c62828;
     font-weight: 700;
@@ -2564,7 +2601,6 @@ html[data-theme="dark"] .theme-family-rail-line {
 }
 
 /* table-layout:fixed のとき可変列が 0 幅に落ちるのを防ぐ（横スクロールで全体を見られる） */
-/* テーマ列の最小幅（親行のボタン帯）を含めた概算 */
 #taskTable {
     border-collapse: separate;
     border-spacing: 0;
@@ -2592,9 +2628,9 @@ html[data-theme="dark"] .theme-family-rail-line {
 #taskTable td:nth-child(5),
 #taskTable th:nth-child(6),
 #taskTable td:nth-child(6) {
-    width: 118px;
-    min-width: 118px;
-    max-width: 118px;
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
     box-sizing: border-box;
 }
 
@@ -2607,7 +2643,7 @@ html[data-theme="dark"] .theme-family-rail-line {
 .list-date-input {
     width: 100%;
     max-width: 100%;
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     line-height: 1.35;
     border: 1px solid transparent;
     border-radius: 4px;

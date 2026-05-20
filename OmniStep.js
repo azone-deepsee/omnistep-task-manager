@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.0 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.1.0";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.1 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.1.1";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -70,6 +70,7 @@ const LS_PBPM_VERSION_LOG = "pbpm_version_log";
 const PBPM_VERSION_CHANGELOG = {
     "1.0.0": "初版リリース",
     "1.1.0": "一覧UI刷新（テーマ/課題統合・着手/納期列・中止・版履歴・アコーディオン一括・外部CSV絞込・タイムライン/カレンダー改善）。スクロールは画面全体に統一。",
+    "1.1.1": "不具合修正（連携一括・親中止・列レイアウト・版履歴幅）。中止表示・親ステータス・子並べ替えアニメ・テーマカレンダー色の改善。",
 };
 
 let externalOwnerFilterActive = false;
@@ -725,6 +726,7 @@ function statusToPlanPercent(status) {
  */
 function getChildScheduleSignal(task, todayMidnight) {
     if (!task || isParentTask(task) || task.archived || isExternalTask(task)) return null;
+    if (task.status === "中止") return "cancelled";
     if (!task.startDate || !task.deadline) return null;
 
     const today0 = new Date(todayMidnight.getTime());
@@ -761,6 +763,11 @@ function getChildScheduleSignal(task, todayMidnight) {
 /** 進捗シグナル用アイコン（色帯と区別。tl＝タイムライン左ラベル用／期限内完了はバーの✨のみのため省略可） */
 function scheduleSignalIconHtml(sig, variant) {
     if (!sig) return "";
+    if (sig === "cancelled") {
+        const cls =
+            variant === "tl" ? "schedule-signal-icon schedule-signal-icon--tl schedule-signal-icon--cancelled" : "schedule-signal-icon schedule-signal-icon--list schedule-signal-icon--cancelled";
+        return `<span class="${cls}" title="${escapeHtmlAttr("中止：このタスクは中止されています")}">✕</span>`;
+    }
     if (variant === "tl" && sig === "earlyDone") return "";
     const map = {
         risk: { ch: "⚠️", tip: "期間に対して進捗が遅れている可能性があります" },
@@ -1068,16 +1075,51 @@ function moveChildTask(childId, dir) {
     // 並び替えの影響で依存は崩れやすいので、移動したタスクと入れ替わった相手のみ依存解除
     clearTaskDependencies([moved.id, swapped.id]);
     rebuildFamilyOrderInTasks(familyKey);
-    save();
-    renderAll();
-    if (typeof renderTimeline === 'function') renderTimeline();
-    showToast("子タスクの順番を変更しました（入れ替わった2件の依存を解除しました）");
+
+    const rowA = document.querySelector(`#taskTable tbody tr[data-id="${childId}"]`);
+    const rowB = document.querySelector(`#taskTable tbody tr[data-id="${swapped.id}"]`);
+    const finishReorder = () => {
+        save();
+        renderAll();
+        if (typeof renderTimeline === "function") renderTimeline();
+        showToast("子タスクの順番を変更しました（入れ替わった2件の依存を解除しました）");
+    };
+    if (rowA && rowB) {
+        const rectA = rowA.getBoundingClientRect();
+        const rectB = rowB.getBoundingClientRect();
+        const dy = rectB.top - rectA.top;
+        rowA.classList.add("row-reorder-anim");
+        rowB.classList.add("row-reorder-anim");
+        rowA.style.transform = `translateY(${dy}px)`;
+        rowB.style.transform = `translateY(${-dy}px)`;
+        const done = () => {
+            rowA.classList.remove("row-reorder-anim");
+            rowB.classList.remove("row-reorder-anim");
+            rowA.style.transform = "";
+            rowB.style.transform = "";
+            finishReorder();
+        };
+        let ended = 0;
+        const onEnd = () => {
+            ended++;
+            if (ended >= 2) {
+                rowA.removeEventListener("transitionend", onEnd);
+                rowB.removeEventListener("transitionend", onEnd);
+                done();
+            }
+        };
+        rowA.addEventListener("transitionend", onEnd);
+        rowB.addEventListener("transitionend", onEnd);
+        setTimeout(done, ACCORDION_ROW_ANIM_OUT_MS + 50);
+        return;
+    }
+    finishReorder();
 }
 
 function toggleFamilyDependency(parentTaskId, checked) {
     const parent = tasks.find(t => String(t.id) === String(parentTaskId));
     if (!parent || !isParentTask(parent) || parent.archived) return;
-    if (parenisTerminalTaskStatus(t.status)) return;
+    if (isTerminalTaskStatus(parent.status)) return;
     const familyKey = getTaskFamilyKey(parent);
     let blocked = 0;
     tasks.forEach(t => {
@@ -1105,7 +1147,7 @@ function toggleFamilyDependency(parentTaskId, checked) {
 function toggleFamilyDependencyByButton(parentTaskId) {
     const parent = tasks.find(t => String(t.id) === String(parentTaskId));
     if (!parent || !isParentTask(parent) || parent.archived) return;
-    if (parenisTerminalTaskStatus(t.status)) return;
+    if (isTerminalTaskStatus(parent.status)) return;
     const familyKey = getTaskFamilyKey(parent);
     const eligible = tasks.filter(t =>
         !t.archived &&
@@ -1342,7 +1384,7 @@ function openVersionHistoryModal() {
         log.forEach((e) => {
             rows += `<tr><td>${escapeHtml(e.ver || "")}</td><td>${escapeHtml(e.content || "")}</td><td>${escapeHtml(formatVersionLogDatetime(e.datetime))}</td><td>${escapeHtml(e.modifier || "—")}</td></tr>`;
         });
-        body.innerHTML = `<table class="version-history-table"><thead><tr><th>ver</th><th>内容</th><th>日時</th><th>修正者</th></tr></thead><tbody>${rows}</tbody></table>`;
+        body.innerHTML = `<table class="version-history-table"><colgroup><col class="version-history-col-ver"><col class="version-history-col-content"><col class="version-history-col-datetime"><col class="version-history-col-modifier"></colgroup><thead><tr><th>ver</th><th>内容</th><th>日時</th><th>修正者</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
     modal.style.display = "flex";
     modal.setAttribute("aria-hidden", "false");
@@ -1407,7 +1449,7 @@ function updateListAccordionBulkStateFromCollapsed() {
 function syncListAccordionBulkButton() {
     const btn = document.getElementById("btnAccordionBulk");
     if (!btn) return;
-    const icon = listAccordionBulkCollapsed ? "⊕" : "⊖";
+    const icon = listAccordionBulkCollapsed ? "＋" : "－";
     btn.textContent = icon;
     btn.setAttribute(
         "aria-label",
@@ -1455,10 +1497,44 @@ function cancelTask(id) {
         showToast("すでに完了または中止です");
         return;
     }
-    const label = isParentTask(task) ? getThemeLabel(task) : getSecondaryStep(task) || getDisplayTaskCode(task);
+    const nowIso = dateToIsoLocal(new Date());
+    if (isParentTask(task)) {
+        const familyKey = getTaskFamilyKey(task);
+        const label = getThemeLabel(task) || "（無題）";
+        const children = tasks.filter(
+            (t) =>
+                !t.archived &&
+                getTaskFamilyKey(t) === familyKey &&
+                !isParentTask(t) &&
+                !isExternalTask(t) &&
+                !isTerminalTaskStatus(t.status)
+        );
+        const childNote =
+            children.length > 0
+                ? `\nこのテーマの子タスク ${children.length} 件もまとめて「中止」にします。`
+                : "\n（中止対象の子タスクはありません）";
+        if (
+            !confirm(
+                `テーマ「${label}」を一括中止しますか？${childNote}\n親・子とも進捗は「中止」になり、完了と同様に履歴へ移動できます。`
+            )
+        ) {
+            return;
+        }
+        task.status = "中止";
+        children.forEach((c) => {
+            c.status = "中止";
+            c.progressUpdatedAt = nowIso;
+        });
+        save();
+        renderAll();
+        if (typeof renderTimeline === "function") renderTimeline();
+        showToast(children.length > 0 ? `テーマと子タスク ${children.length} 件を中止にしました` : "テーマを中止にしました");
+        return;
+    }
+    const label = getSecondaryStep(task) || getDisplayTaskCode(task);
     if (!confirm(`「${label}」を中止しますか？\n進捗は「中止」になり、完了と同様に履歴へ移動できます。`)) return;
     task.status = "中止";
-    if (!isParentTask(task)) task.progressUpdatedAt = dateToIsoLocal(new Date());
+    task.progressUpdatedAt = nowIso;
     save();
     renderAll();
     if (typeof renderTimeline === "function") renderTimeline();
@@ -1589,12 +1665,14 @@ function getThemeCalendarSegments() {
             e = x;
         }
         const isExt = isExternalTask(parent);
+        const accent = getThemeAccentForFamily(fk, pool);
+        const color = isExt ? "#5c6bc0" : accent || THEME_CAL_BAR_COLORS[colorIdx++ % THEME_CAL_BAR_COLORS.length];
         segs.push({
             label: getThemeLabel(parent),
             start: s,
             end: e,
             isExt,
-            color: isExt ? "#5c6bc0" : THEME_CAL_BAR_COLORS[colorIdx++ % THEME_CAL_BAR_COLORS.length],
+            color,
         });
     });
     return segs;
@@ -2375,8 +2453,8 @@ function renderAll() {
                 // 自動ステータス同期
                 if (!isExt) {
                     if (percent === 100) {
-                        const allCancelled = subTasks.every((t) => t.status === "中止");
-                        task.status = allCancelled ? "中止" : "完了";
+                        // 子がすべて終端でもテーマ完了とはみなさず、親は計画停止（中止）として表示
+                        task.status = "中止";
                     } else if (isTerminalTaskStatus(task.status)) {
                         task.status = "進行中";
                     }
@@ -2407,11 +2485,9 @@ function renderAll() {
         const railLine = `<span class="theme-family-rail-line" aria-hidden="true"></span>`;
         const gutterBlock = `<div class="task-row-gutter">${colorBarBtn}${railLine}</div>`;
 
-        const scheduleIconList = !isParent ? scheduleSignalIconHtml(scheduleSig, "list") : "";
-        const cancelledMarkHtml =
-            task.status === "中止"
-                ? `<span class="task-cancelled-mark"${helpAttr("中止：このタスクは中止されています")}>✕</span>`
-                : "";
+        const scheduleSigForIcon =
+            !isParent && task.status === "中止" ? "cancelled" : scheduleSig;
+        const scheduleIconList = !isParent ? scheduleSignalIconHtml(scheduleSigForIcon, "list") : "";
         const checkboxHTML = isParent && !isExt
             ? `<input type="checkbox" class="row-check" onchange="updateDeleteButtonState()" style="transform: scale(1.2); cursor:pointer;"${helpAttr('行チェック：CSV出力・一括削除などの対象に含める（親行のみ）')}>`
             : `<span style="display:inline-block; width:20px;"></span>`;
@@ -2461,7 +2537,7 @@ function renderAll() {
                     ? "計画より進捗が先行しています。"
                     : "";
         const statusTitleAttr = progHint ? ` title="${escapeHtmlAttr(progHint)}"` : "";
-        const col1 = `<td class="td-gutter-cell"><div class="gutter-cell-inner">${gutterBlock}<div class="gutter-check-slot"><div class="gutter-check-main">${scheduleIconList}${cancelledMarkHtml}${checkboxHTML}</div>${orderBtns ? `<div class="gutter-order-row">${orderBtns}</div>` : ""}</div></div></td>`;
+        const col1 = `<td class="td-gutter-cell"><div class="gutter-cell-inner">${gutterBlock}<div class="gutter-check-slot"><div class="gutter-check-main">${scheduleIconList}${checkboxHTML}</div>${orderBtns ? `<div class="gutter-order-row">${orderBtns}</div>` : ""}</div></div></td>`;
 
         const col2 = `<td>
             <select class="cat-select" ${(!isParent || isLocked) ? 'disabled' : ''} 
@@ -2485,7 +2561,9 @@ function renderAll() {
         const depChecked = !!task.fFlag;
         const depCheckboxHtml = (depEligible && !isLocked)
             ? `<input type="checkbox" class="dep-flag-input" ${depChecked ? "checked" : ""} onchange="updateTaskValue(${task.id}, 'fFlag', this.checked)"${helpAttr('依存連携：ONにすると直前の子の納期より前に期間が入らないよう前後が連携します')}>`
-            : "";
+            : !isParent
+              ? `<span class="dep-flag-spacer" aria-hidden="true"></span>`
+              : "";
         let parentDepToggleHtml = "";
         if (isParent && !isLocked) {
             const eligible = tasks.filter(t =>
@@ -2943,7 +3021,12 @@ function renderTimeline() {
         const isCancelled = task.status === "中止";
         const deadlineDateTl = task.deadline ? new Date(task.deadline) : null;
         const isExpiredTl = !isTerminalTaskStatus(task.status) && deadlineDateTl && deadlineDateTl < todayTl;
-        const scheduleSigTl = !isExpiredTl ? getChildScheduleSignal(task, todayTl) : null;
+        const scheduleSigTl =
+            !isParent && task.status === "中止"
+                ? "cancelled"
+                : !isExpiredTl
+                  ? getChildScheduleSignal(task, todayTl)
+                  : null;
         const accentTl = getThemeAccentForFamily(familyKey, tasks.concat(externalTasks));
         const toggleIcon = isCollapsedT ? "＋" : "－";
         const childCount = timelineTasks.filter(t => !t.archived && getTaskFamilyKey(t) === familyKey && !isParentTask(t)).length;
@@ -3923,7 +4006,7 @@ function updateTaskDate(id, field, value) {
 function resetFamilyPeriods(parentId) {
     const parent = tasks.find((t) => String(t.id) === String(parentId));
     if (!parent || !isParentTask(parent) || isExternalTask(parent)) return;
-    if (parent.archived || parenisTerminalTaskStatus(t.status)) {
+    if (parent.archived || isTerminalTaskStatus(parent.status)) {
         showToast("完了または履歴のテーマは期間リセットできません");
         return;
     }
