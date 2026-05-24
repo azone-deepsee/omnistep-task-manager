@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.1 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.1.1";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.2 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.1.2";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -65,13 +65,39 @@ function isTerminalTaskStatus(status) {
     return TERMINAL_STATUSES.has(status);
 }
 
-const LS_PBPM_VERSION_LOG = "pbpm_version_log";
-/** 版ごとの変更概要（リリース時に追記） */
-const PBPM_VERSION_CHANGELOG = {
-    "1.0.0": "初版リリース",
-    "1.1.0": "一覧UI刷新（テーマ/課題統合・着手/納期列・中止・版履歴・アコーディオン一括・外部CSV絞込・タイムライン/カレンダー改善）。スクロールは画面全体に統一。",
-    "1.1.1": "不具合修正（連携一括・親中止・列レイアウト・版履歴幅）。中止表示・親ステータス・子並べ替えアニメ・テーマカレンダー色の改善。",
-};
+/**
+ * 版履歴（アプリ内蔵・表示の正）。リリース時に先頭へ追記。localStorage には依存しない。
+ * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
+ */
+const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.1.2",
+        content:
+            "タスク検索をテーマ単位で表示。検索語に一致するタスクを含むテーマの親行・子行をまとめて表示（アコーディオン閉じ時も子行を展開）。",
+        releasedAt: "2026-05-20",
+        modifier: "—",
+    },
+    {
+        ver: "1.1.1",
+        content:
+            "不具合修正（連携一括・親中止・列レイアウト・版履歴幅）。中止表示・親ステータス・子並べ替えアニメ・テーマカレンダー色の改善。",
+        releasedAt: "2026-05-20",
+        modifier: "—",
+    },
+    {
+        ver: "1.1.0",
+        content:
+            "一覧UI刷新（テーマ/課題統合・着手/納期列・中止・版履歴・アコーディオン一括・外部CSV絞込・タイムライン/カレンダー改善）。スクロールは画面全体に統一。",
+        releasedAt: "2026-05-20",
+        modifier: "—",
+    },
+    {
+        ver: "1.0.0",
+        content: "初版リリース。",
+        releasedAt: "",
+        modifier: "—",
+    },
+];
 
 let externalOwnerFilterActive = false;
 let listAccordionBulkCollapsed = false;
@@ -1333,58 +1359,33 @@ function getExternalCsvOwnerId() {
     return t ? String(t.__externalOwnerId).trim() : "";
 }
 
-function loadVersionLog() {
-    try {
-        const raw = localStorage.getItem(LS_PBPM_VERSION_LOG);
-        const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr : [];
-    } catch {
-        return [];
-    }
+function getVersionHistoryForDisplay() {
+    return PBPM_VERSION_HISTORY.slice();
 }
 
-function saveVersionLog(log) {
-    localStorage.setItem(LS_PBPM_VERSION_LOG, JSON.stringify(log.slice(0, 80)));
-}
-
-function ensureVersionLogEntry() {
-    let log = loadVersionLog();
-    if (log.some((e) => e && e.ver === PBPM_APP_VERSION)) return;
-    log.unshift({
-        ver: PBPM_APP_VERSION,
-        content: PBPM_VERSION_CHANGELOG[PBPM_APP_VERSION] || "（変更内容未記載）",
-        datetime: new Date().toISOString(),
-        modifier: ownerName || "—",
-    });
-    saveVersionLog(log);
-}
-
-function formatVersionLogDatetime(iso) {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return String(iso);
+function formatVersionHistoryDate(releasedAt) {
+    if (!releasedAt) return "—";
+    const d = new Date(`${releasedAt}T12:00:00`);
+    if (isNaN(d.getTime())) return String(releasedAt);
     const y = d.getFullYear();
     const mo = String(d.getMonth() + 1).padStart(2, "0");
     const da = String(d.getDate()).padStart(2, "0");
-    const h = String(d.getHours()).padStart(2, "0");
-    const mi = String(d.getMinutes()).padStart(2, "0");
-    return `${y}/${mo}/${da} ${h}:${mi}`;
+    return `${y}/${mo}/${da}`;
 }
 
 function openVersionHistoryModal() {
-    ensureVersionLogEntry();
     const modal = document.getElementById("versionHistoryModal");
     const body = document.getElementById("versionHistoryBody");
     if (!modal || !body) return;
-    const log = loadVersionLog();
+    const log = getVersionHistoryForDisplay();
     if (!log.length) {
         body.innerHTML = "<p style=\"margin:0;color:var(--app-text-muted);\">版履歴はまだありません。</p>";
     } else {
         let rows = "";
         log.forEach((e) => {
-            rows += `<tr><td>${escapeHtml(e.ver || "")}</td><td>${escapeHtml(e.content || "")}</td><td>${escapeHtml(formatVersionLogDatetime(e.datetime))}</td><td>${escapeHtml(e.modifier || "—")}</td></tr>`;
+            rows += `<tr><td>${escapeHtml(e.ver || "")}</td><td>${escapeHtml(e.content || "")}</td><td>${escapeHtml(formatVersionHistoryDate(e.releasedAt))}</td><td>${escapeHtml(e.modifier || "—")}</td></tr>`;
         });
-        body.innerHTML = `<table class="version-history-table"><colgroup><col class="version-history-col-ver"><col class="version-history-col-content"><col class="version-history-col-datetime"><col class="version-history-col-modifier"></colgroup><thead><tr><th>ver</th><th>内容</th><th>日時</th><th>修正者</th></tr></thead><tbody>${rows}</tbody></table>`;
+        body.innerHTML = `<table class="version-history-table"><colgroup><col class="version-history-col-ver"><col class="version-history-col-content"><col class="version-history-col-datetime"><col class="version-history-col-modifier"></colgroup><thead><tr><th>ver</th><th>内容</th><th>日付</th><th>修正者</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
     modal.style.display = "flex";
     modal.setAttribute("aria-hidden", "false");
@@ -2398,6 +2399,12 @@ function renderAll() {
     syncExternalOwnerFilterButton();
     updateListAccordionBulkStateFromCollapsed();
 
+    const searchQuery = getSearchQueryLower();
+    const searchFamilyKeys = getSearchMatchingFamilyKeys(displayRows, searchQuery);
+    if (searchFamilyKeys) {
+        displayRows = displayRows.filter((t) => searchFamilyKeys.has(getTaskFamilyKey(t)));
+    }
+
     let lastThemeRoot = "";
     let useGrayBackground = false;
 
@@ -2437,9 +2444,10 @@ function renderAll() {
             lastThemeRoot = familyKey;
         }
 
-        // 開閉状態の判定
-        const isCollapsed = (typeof collapsedThemes !== 'undefined') && collapsedThemes.includes(familyKey);
-        if (!isParent && isCollapsed) return;
+        // 開閉状態の判定（検索ヒット時は該当テーマの子行も表示）
+        const isCollapsed = (typeof collapsedThemes !== "undefined") && collapsedThemes.includes(familyKey);
+        const showDespiteCollapse = searchFamilyKeys && searchFamilyKeys.has(familyKey);
+        if (!isParent && isCollapsed && !showDespiteCollapse) return;
 
         // 親タスクの進捗計算
         let progressLabel = "";
@@ -2677,12 +2685,17 @@ function renderAll() {
         renderTimeline();
     }
     updateMasterDropdown();
-    const sb = document.getElementById('searchBox');
-    if (sb && sb.value.trim()) {
-        filterTasks();
-    } else {
-        updateDeleteButtonState();
+    if (isSearchFilterActive()) {
+        const checkAll = document.getElementById("checkAll");
+        if (checkAll) {
+            checkAll.checked = false;
+            checkAll.indeterminate = false;
+        }
+        const inc = document.getElementById("includeArchivedBulk");
+        if (inc) inc.checked = false;
     }
+    syncIncludeArchivedBulkVisibility();
+    updateDeleteButtonState();
     lastExpandedListTheme = null;
     setupScrollTopButtons();
 }
@@ -4091,6 +4104,44 @@ function isSearchFilterActive() {
     return !!(sb && String(sb.value || "").trim());
 }
 
+function getSearchQueryLower() {
+    return (document.getElementById("searchBox")?.value || "").trim().toLowerCase();
+}
+
+function buildTaskSearchHaystack(task) {
+    return [
+        getPrimaryStep(task),
+        getSecondaryStep(task),
+        getDisplayTaskCode(task),
+        getThemeLabel(task),
+        task.category || "",
+        task.status || "",
+        getTargetName(task) || "",
+        getTargetDate(task) || "",
+        task.startDate || "",
+        task.deadline || "",
+        (task.memo || "").trim(),
+        task.taskCode || "",
+    ]
+        .join(" ")
+        .toLowerCase();
+}
+
+function taskMatchesSearchQuery(task, queryLower) {
+    if (!queryLower) return true;
+    return buildTaskSearchHaystack(task).includes(queryLower);
+}
+
+/** 検索語に一致するタスクを含むテーマ（familyKey）の集合。検索なしは null */
+function getSearchMatchingFamilyKeys(pool, queryLower) {
+    if (!queryLower) return null;
+    const keys = new Set();
+    pool.forEach((t) => {
+        if (taskMatchesSearchQuery(t, queryLower)) keys.add(getTaskFamilyKey(t));
+    });
+    return keys;
+}
+
 function syncIncludeArchivedBulkVisibility() {
     const wrap = document.getElementById("includeArchivedBulkWrap");
     const checkAll = document.getElementById("checkAll");
@@ -4170,24 +4221,7 @@ function countParentThemesInFamilySet(familySet) {
 }
 
 function filterTasks() {
-    const query = (document.getElementById('searchBox')?.value || "").toLowerCase();
-    document.querySelectorAll('#taskBody tr').forEach((row) => {
-        const match = row.innerText.toLowerCase().includes(query);
-        row.style.display = match ? "" : "none";
-        if (!match) {
-            const cb = row.querySelector('.row-check');
-            if (cb) cb.checked = false;
-        }
-    });
-    const checkAll = document.getElementById('checkAll');
-    if (checkAll) {
-        checkAll.checked = false;
-        checkAll.indeterminate = false;
-    }
-    const inc = document.getElementById('includeArchivedBulk');
-    if (inc) inc.checked = false;
-    syncIncludeArchivedBulkVisibility();
-    updateDeleteButtonState();
+    renderAll();
 }
 
 // WBS（親子）を考慮したソートロジック
