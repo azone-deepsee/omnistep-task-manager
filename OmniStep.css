@@ -226,9 +226,15 @@ tr.expired .bar,
     white-space: nowrap;
 }
 
-/* タイムライン PDCA（子）：計画＝薄色＋破線枠、実行＝実塗り */
+/* タイムライン PDCA（子）：計画＝元幅の破線枠、実績＝下段実線（計画上に重ねる・B1） */
 .timeline-bar--pdca {
     box-sizing: border-box;
+}
+.timeline-bar--pdca .timeline-resize-handle {
+    z-index: 15;
+}
+.timeline-bar--pdca-overlap .timeline-bar-exec-hit {
+    z-index: 12;
 }
 .timeline-bar--pdca.timeline-bar--completed {
     opacity: 0.74;
@@ -238,8 +244,15 @@ tr.expired .bar,
     background: rgba(217, 48, 37, 0.16) !important;
     border-color: rgba(217, 48, 37, 0.55) !important;
 }
-.timeline-bar--pdca.timeline-expired .timeline-bar-exec {
-    background-color: #ff5252 !important;
+.timeline-bar--pdca.timeline-expired .timeline-bar-exec-main,
+.timeline-bar--pdca.timeline-expired .timeline-bar-exec-over {
+    filter: saturate(1.05);
+}
+
+.timeline-bar--pdca-overlap .timeline-pdca-arrow--plan {
+    top: auto;
+    bottom: 1px;
+    transform: translate(-50%, 0);
 }
 
 .timeline-pdca-arrow {
@@ -2471,8 +2484,9 @@ html[data-theme="dark"] .timeline-bar--pdca.timeline-expired .timeline-bar-plan 
     background: rgba(90, 28, 32, 0.35) !important;
     border-color: rgba(180, 90, 90, 0.65) !important;
 }
-html[data-theme="dark"] .timeline-bar--pdca.timeline-expired .timeline-bar-exec {
-    background-color: #6e2424 !important;
+html[data-theme="dark"] .timeline-bar--pdca.timeline-expired .timeline-bar-exec-main,
+html[data-theme="dark"] .timeline-bar--pdca.timeline-expired .timeline-bar-exec-over {
+    filter: saturate(1.1);
 }
 html[data-theme="dark"] .timeline-pdca-arrow--plan {
     color: #eceff1;

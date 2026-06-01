@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.3 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.1.3";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.4 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.1.4";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -104,6 +104,13 @@ function applyParentStatusFromChildrenForFamily(familyKey) {
  * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
  */
 const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.1.4",
+        content:
+            "タイムライン子バーのPDCA表示（B1）：計画は従来幅の破線枠、実績は下段の実線で重ね表示。実績修正OFF＝計画の移動・納期伸縮、ON＝実績のみ移動・終了日伸縮。",
+        releasedAt: "2026-05-20",
+        modifier: "—",
+    },
     {
         ver: "1.1.3",
         content:
@@ -946,6 +953,11 @@ function timelinePixelSpanForRange(gridStartDate, dayWidth, getX, dStartIso, dEn
     const w = Math.max(dayWidth, endX - startX + (s > gridStartDate ? dayWidth : 0));
     return { startX, width: w };
 }
+
+/** 子PDCA：計画＝元サイズの破線枠、実績＝下段の細い実線（計画上に重ねる・B1） */
+const TIMELINE_PDCA_EXEC_H = 10;
+const TIMELINE_PDCA_SINGLE_H = 21.6;
+const TIMELINE_PDCA_EXEC_TOP = TIMELINE_PDCA_SINGLE_H - TIMELINE_PDCA_EXEC_H;
 
 /** 依存線用：子PDCAは計画区間の端を使う（実績の伸び・ずれに追従しない） */
 function timelineDepBarEdgeClientX(barEl, edge) {
@@ -3314,28 +3326,33 @@ function renderTimeline() {
             } else {
                 bar.classList.add("timeline-bar--pdca");
                 const gridStart = startDate;
+                if (
+                    pdcaActualEditMode &&
+                    !readOnlyBar &&
+                    !isTerminalTaskStatus(task.status) &&
+                    task.status !== "未着手"
+                ) {
+                    ensurePdcaActualSeedFromComputed(task, todayTl);
+                }
                 const planSpan = timelinePixelSpanForRange(gridStart, dayWidth, getX, task.startDate, task.deadline);
-                const actS = getPdcaActualStartForDisplay(task);
-                const actE = getPdcaActualEndForDisplay(task, todayTl);
-                let wrapLeft = planSpan.startX;
-                let wrapWidth = planSpan.width;
-                let planRelLeft = 0;
-                let planRelW = planSpan.width;
+                let actS = getPdcaActualStartForDisplay(task);
+                let actE = getPdcaActualEndForDisplay(task, todayTl);
+                const wrapLeft = planSpan.startX;
+                const wrapWidth = planSpan.width;
+                const planRelLeft = 0;
+                const planRelW = planSpan.width;
                 let actRelLeft = 0;
                 let actRelW = 0;
                 let hasAct = false;
                 if (actS && actE && compareIsoDate(actS, actE) <= 0) {
                     hasAct = true;
                     const actSpan = timelinePixelSpanForRange(gridStart, dayWidth, getX, actS, actE);
-                    wrapLeft = Math.min(planSpan.startX, actSpan.startX);
-                    const wrapRight = Math.max(planSpan.startX + planSpan.width, actSpan.startX + actSpan.width);
-                    wrapWidth = Math.max(dayWidth, wrapRight - wrapLeft);
-                    planRelLeft = planSpan.startX - wrapLeft;
-                    planRelW = planSpan.width;
-                    actRelLeft = actSpan.startX - wrapLeft;
+                    actRelLeft = actSpan.startX - planSpan.startX;
                     actRelW = actSpan.width;
+                    bar.classList.add("timeline-bar--pdca-overlap");
                 }
 
+                bar.style.height = `${TIMELINE_PDCA_SINGLE_H}px`;
                 bar.style.left = `${wrapLeft}px`;
                 bar.style.width = `${wrapWidth}px`;
                 bar.dataset.planLeft = String(planRelLeft);
@@ -3353,7 +3370,8 @@ function renderTimeline() {
                     `background:${hexToRgba(barBase, 0.16)}`,
                     `border:2px dashed ${hexToRgba(barBase, 0.5)}`,
                     "border-radius:3px",
-                    "pointer-events:none"
+                    "pointer-events:none",
+                    "z-index:6"
                 ].join(";");
                 bar.appendChild(planLayer);
 
@@ -3393,14 +3411,14 @@ function renderTimeline() {
                         "position:absolute",
                         `left:${actRelLeft}px`,
                         `width:${actRelW}px`,
-                        "top:0",
-                        "height:100%",
-                        "z-index:7",
+                        `top:${TIMELINE_PDCA_EXEC_TOP}px`,
+                        `height:${TIMELINE_PDCA_EXEC_H}px`,
+                        canEditAct ? "z-index:12" : "z-index:7",
                         "box-sizing:border-box",
                         canEditAct ? "pointer-events:auto;cursor:grab" : "pointer-events:none"
                     ].join(";");
 
-                    const addSeg = (cls, bg, isoA, isoB, rad) => {
+                    const addSeg = (cls, bg, isoA, isoB, rad, borderCss) => {
                         if (!isoA || !isoB || compareIsoDate(isoA, isoB) > 0) return null;
                         const sp = timelinePixelSpanForRange(gridStart, dayWidth, getX, isoA, isoB);
                         const innerL = sp.startX - wrapLeft - actRelLeft;
@@ -3413,6 +3431,7 @@ function renderTimeline() {
                             "top:0",
                             "height:100%",
                             `background:${bg}`,
+                            borderCss || "border:none",
                             "box-sizing:border-box",
                             `border-radius:${rad}`,
                             "pointer-events:none",
@@ -3421,6 +3440,7 @@ function renderTimeline() {
                         return el;
                     };
 
+                    const execBorder = `1px solid ${hexToRgba(barBase, 0.88)}`;
                     const mainEl =
                         mS && mE
                             ? addSeg(
@@ -3428,13 +3448,21 @@ function renderTimeline() {
                                   barBase,
                                   mS,
                                   mE,
-                                  !oS && actRelW >= wrapWidth - 1 ? "3px" : "3px 0 0 3px"
+                                  !oS && actRelW >= wrapWidth - 1 ? "3px" : "3px 0 0 3px",
+                                  execBorder
                               )
                             : null;
                     const overRad = mS && mE ? "0 3px 3px 0" : "3px";
                     const overEl =
                         oS && oE
-                            ? addSeg("timeline-bar-exec-over", "rgba(229, 115, 115, 0.92)", oS, oE, overRad)
+                            ? addSeg(
+                                  "timeline-bar-exec-over",
+                                  "rgba(229, 115, 115, 0.92)",
+                                  oS,
+                                  oE,
+                                  overRad,
+                                  "1px solid rgba(198, 40, 40, 0.75)"
+                              )
                             : null;
                     if (overEl) {
                         overEl.style.border = "1px solid rgba(198, 40, 40, 0.75)";
@@ -3458,8 +3486,8 @@ function renderTimeline() {
 
                 labelEl.style.cssText = [
                     "position:absolute",
-                    "left:0",
-                    "width:100%",
+                    `left:${planRelLeft}px`,
+                    `width:${planRelW}px`,
                     "top:0",
                     "height:100%",
                     "box-sizing:border-box",
@@ -3471,9 +3499,9 @@ function renderTimeline() {
                     "white-space:nowrap",
                     "overflow:hidden",
                     "text-overflow:ellipsis",
-                    "pointer-events:auto",
+                    pdcaActualEditMode ? "pointer-events:none" : "pointer-events:auto",
                     "cursor:default",
-                    "z-index:10",
+                    "z-index:9",
                     isCompleted
                         ? "color:rgba(90,90,90,0.98);text-shadow:0 0 2px #fff,0 0 4px rgba(255,255,255,0.85)"
                         : "color:#102027;text-shadow:0 0 2px #fff,0 0 5px rgba(255,255,255,0.95),0 1px 0 rgba(255,255,255,0.8)"
@@ -3502,8 +3530,11 @@ function renderTimeline() {
             if (isExpiredTl) bar.classList.add("timeline-expired");
             if (!readOnlyBar) {
                 bar.onmousedown = (e) => {
-                    if (!isParent && pdcaActualEditMode && e.target.closest(".timeline-bar-exec-hit")) {
-                        startPdcaActualBarDrag(e, task, bar);
+                    if (e.target.closest(".timeline-resize-handle")) return;
+                    if (!isParent && pdcaActualEditMode) {
+                        if (e.target.closest(".timeline-bar-exec-hit")) {
+                            startPdcaActualBarDrag(e, task, bar);
+                        }
                         return;
                     }
                     startDrag(e, task, bar);
@@ -3533,7 +3564,7 @@ function renderTimeline() {
             } else {
                 bar.setAttribute(
                     "data-help",
-                    "タイムライン・子バー：破線＝計画、実線の塗り＝実績（計画外はそのまま実線、納期超過分は薄赤）。ドラッグで計画ごと移動、実績修正ONで実績のみ移動／伸縮"
+                    "タイムライン・子バー：破線枠＝計画（着手〜納期の元幅）、下に重ねた実線＝実績。納期超過分は実績が薄赤。ドラッグで計画ごと移動、実績修正ONで実績のみ移動／伸縮"
                 );
             }
 
@@ -3546,23 +3577,33 @@ function renderTimeline() {
                 resizeHandle.style.height = "100%";
                 resizeHandle.style.cursor = "ew-resize";
                 resizeHandle.style.background = "rgba(255,255,255,0.35)";
-                resizeHandle.style.zIndex = "10";
+                resizeHandle.style.zIndex = "15";
+                resizeHandle.style.pointerEvents = "auto";
                 if (!isParent && bar.classList.contains("timeline-bar--pdca")) {
                     const pl = parseFloat(bar.dataset.planLeft || "0");
                     const pw = parseFloat(bar.dataset.planWidth || "0");
                     const hit = bar.querySelector(".timeline-bar-exec-hit");
+                    const overlap = bar.classList.contains("timeline-bar--pdca-overlap");
                     if (pdcaActualEditMode && hit) {
+                        resizeHandle.dataset.resizeTarget = "actual";
                         const actL = parseFloat(hit.style.left || "0");
                         const actW = parseFloat(hit.style.width || "0");
                         resizeHandle.style.left = `${actL + actW - 8}px`;
                         resizeHandle.style.right = "auto";
+                        if (overlap) {
+                            resizeHandle.style.top = `${TIMELINE_PDCA_EXEC_TOP}px`;
+                            resizeHandle.style.height = `${TIMELINE_PDCA_EXEC_H}px`;
+                        }
                         resizeHandle.setAttribute(
                             "data-help",
                             "実績ハンドル：実績の終了日だけを伸縮します（実績修正ON時）"
                         );
                     } else {
+                        resizeHandle.dataset.resizeTarget = "plan";
                         resizeHandle.style.left = `${pl + pw - 8}px`;
                         resizeHandle.style.right = "auto";
+                        resizeHandle.style.top = "0";
+                        resizeHandle.style.height = "100%";
                         resizeHandle.setAttribute(
                             "data-help",
                             "納期ハンドル：計画の納期を変更します"
@@ -3898,7 +3939,8 @@ function startDrag(e, task, bar) {
 
 function startResize(e, task, bar) {
     if (isParentTask(task) || isTerminalTaskStatus(task.status) || isExternalTask(task)) return;
-    if (pdcaActualEditMode && !isParentTask(task)) {
+    const resizeTarget = e.currentTarget?.dataset?.resizeTarget || "plan";
+    if (resizeTarget === "actual") {
         startPdcaActualResize(e, task, bar);
         return;
     }
