@@ -110,9 +110,10 @@
             Personal Business Project Manager
         </h1>
         <div class="header-right-group" style="display: flex; align-items: center; gap: 15px;">
-            <button type="button" id="btnExternalOwnerFilter" class="btn-secondary btn-external-owner-filter"
-                style="display:none;" onclick="toggleExternalOwnerFilter()"
-                data-help="取込みCSVの担当者IDの行だけを一覧・タイムラインに表示します">（担当者ID）のみ表示</button>
+            <select id="externalOwnerFilterSelect" class="btn-secondary external-owner-filter-select"
+                style="display:none;" onchange="onExternalOwnerFilterChange()"
+                data-help="外部CSVの表示範囲：自分のタスクとの併示、全外部、担当者ごとに切り替えます"
+                aria-label="外部CSV表示フィルタ"></select>
             <button class="btn-secondary" type="button" onclick="exportTemplate()"
                 data-help="テンプレート保存：タスク構成などをCSVテンプレートとして書き出します">テンプレート保存</button>
             <button class="btn-secondary" type="button" onclick="triggerTemplateImport()"

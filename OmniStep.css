@@ -206,8 +206,24 @@ tr.expired .bar,
     font-weight: 500;
 }
 
+.sticky-label .label-text .tl-parent-label--ellipsis-tip {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
+}
+
 .sticky-label[data-parent="1"] .label-text strong {
     font-weight: 700;
+}
+
+.timeline-bar--ellipsis-tip {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* タイムライン PDCA（子）：計画＝薄色＋破線枠、実行＝実塗り */
@@ -2499,7 +2515,14 @@ html[data-theme="dark"] .theme-family-rail-line {
     margin-right: 2px;
 }
 
-.btn-external-owner-filter.btn-external-filter-active {
+.external-owner-filter-select {
+    max-width: min(280px, 42vw);
+    font-size: 0.82rem;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
+.external-owner-filter-select.external-owner-filter-active {
     background: var(--app-view-active-bg);
     color: #fff;
     border-color: var(--app-view-active-bg);

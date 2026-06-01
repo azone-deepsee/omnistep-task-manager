@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.2 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.1.2";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.3 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.1.3";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -65,11 +65,52 @@ function isTerminalTaskStatus(status) {
     return TERMINAL_STATUSES.has(status);
 }
 
+/** 子がすべて終端のとき、枝番最後の子のステータスで親の表示を決める（完了／中止） */
+function resolveParentStatusFromChildren(subTasks) {
+    if (!subTasks.length) return null;
+    const sorted = [...subTasks].sort((a, b) => parseInt(getTaskBranchNo(a), 10) - parseInt(getTaskBranchNo(b), 10));
+    if (!sorted.every((t) => isTerminalTaskStatus(t.status))) return null;
+    const last = sorted[sorted.length - 1];
+    if (last.status === "完了") return "完了";
+    if (last.status === "中止") return "中止";
+    return null;
+}
+
+/** 子タスクの状態から親ステータスを更新（保存は呼び出し側） */
+function applyParentStatusFromChildrenForFamily(familyKey) {
+    const parent = tasks.find(
+        (t) => !t.archived && getTaskFamilyKey(t) === familyKey && isParentTask(t) && !isExternalTask(t)
+    );
+    if (!parent) return false;
+    const subTasks = tasks.filter(
+        (t) => !t.archived && getTaskFamilyKey(t) === familyKey && !isParentTask(t) && !isExternalTask(t)
+    );
+    if (!subTasks.length) return false;
+    const resolved = resolveParentStatusFromChildren(subTasks);
+    if (resolved) {
+        if (parent.status === resolved) return false;
+        parent.status = resolved;
+        return true;
+    }
+    if (isTerminalTaskStatus(parent.status)) {
+        parent.status = "進行中";
+        return true;
+    }
+    return false;
+}
+
 /**
  * 版履歴（アプリ内蔵・表示の正）。リリース時に先頭へ追記。localStorage には依存しない。
  * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
  */
 const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.1.3",
+        content:
+            "過去月の手動開閉を復活。親ステータスを子変更時に保存。タイムライン検索（テーマ単位）。外部CSV複数担当の取込・表示切替・タスクID表記（担当者番号）******。",
+        releasedAt: "2026-06-01",
+        modifier: "—",
+    },
     {
         ver: "1.1.2",
         content:
@@ -99,7 +140,8 @@ const PBPM_VERSION_HISTORY = [
     },
 ];
 
-let externalOwnerFilterActive = false;
+/** 外部CSV表示フィルタ: merged=自分+全外部 / external-all=外部のみ全担当 / それ以外=担当者ID */
+let externalOwnerFilterMode = "merged";
 let listAccordionBulkCollapsed = false;
 
 /** テーマ色パレット（親行のカラーバーから選択） */
@@ -247,32 +289,59 @@ function showThemeOverflowTooltip(text, clientX, clientY) {
     el.style.top = `${Math.max(6, y)}px`;
 }
 
-/** 一覧で省略表示中の要素（テーマ名・業務内容）の全文ホバー（ヘルプとは別要素） */
-function findListViewEllipsisOverflowTarget(e, listView) {
-    let el = e.target.closest(".theme-name--ellipsis-tip");
+const ELLIPSIS_OVERFLOW_SELECTORS =
+    ".theme-name--ellipsis-tip, .tl-child-detail--ellipsis-tip, .tl-parent-label--ellipsis-tip, .timeline-bar-label--ellipsis-tip, .timeline-bar--ellipsis-tip";
+
+/** 省略表示中テキストの全文ホバー対象を root 内から探す */
+function findEllipsisOverflowTarget(e, rootEl) {
+    if (!rootEl) return null;
+    let el = e.target.closest(ELLIPSIS_OVERFLOW_SELECTORS);
     if (!el) {
         const under = document.elementFromPoint(e.clientX, e.clientY);
-        if (under && listView.contains(under)) el = under.closest(".theme-name--ellipsis-tip");
+        if (under && rootEl.contains(under)) el = under.closest(ELLIPSIS_OVERFLOW_SELECTORS);
     }
     return el || null;
 }
 
+function findListViewEllipsisOverflowTarget(e, listView) {
+    return findEllipsisOverflowTarget(e, listView);
+}
+
+function findTimelineEllipsisOverflowTarget(e, timelineView) {
+    return findEllipsisOverflowTarget(e, timelineView);
+}
+
 function onDocumentMouseMoveThemeOverflow(e) {
     const listView = document.getElementById("listView");
-    if (!listView || listView.style.display === "none" || !listView.contains(e.target)) {
+    const timelineView = document.getElementById("timelineView");
+    const inList = listView && listView.style.display !== "none" && listView.contains(e.target);
+    const inTimeline =
+        timelineView && timelineView.style.display !== "none" && timelineView.contains(e.target);
+    if (!inList && !inTimeline) {
         hideThemeOverflowTooltip();
         return;
     }
-    const nameEl = findListViewEllipsisOverflowTarget(e, listView);
+    const root = inList ? listView : timelineView;
+    const nameEl = findEllipsisOverflowTarget(e, root);
     if (!nameEl || !document.body.contains(nameEl)) {
         hideThemeOverflowTooltip();
         return;
     }
-    if (nameEl.scrollWidth <= nameEl.clientWidth + 1) {
+    const labelWrap = nameEl.closest(".label-text");
+    const truncated =
+        nameEl.scrollWidth > nameEl.clientWidth + 1 ||
+        nameEl.scrollHeight > nameEl.clientHeight + 1 ||
+        (labelWrap && labelWrap.scrollHeight > labelWrap.clientHeight + 1);
+    if (!truncated) {
         hideThemeOverflowTooltip();
         return;
     }
-    showThemeOverflowTooltip(nameEl.innerText.trim(), e.clientX, e.clientY);
+    const text = (nameEl.textContent || nameEl.innerText || "").trim();
+    if (!text) {
+        hideThemeOverflowTooltip();
+        return;
+    }
+    showThemeOverflowTooltip(text, e.clientX, e.clientY);
 }
 
 function bindHelpHoverListeners() {
@@ -1354,9 +1423,34 @@ function toggleDarkMode() {
 
 let externalTasks = []; // 外部CSV（閲覧専用・保存しない）
 
-function getExternalCsvOwnerId() {
-    const t = externalTasks.find((x) => x && x.__externalOwnerId);
-    return t ? String(t.__externalOwnerId).trim() : "";
+function getExternalCsvOwnerIds() {
+    const set = new Set();
+    externalTasks.forEach((t) => {
+        if (t && t.__externalOwnerId) set.add(String(t.__externalOwnerId).trim());
+    });
+    return Array.from(set).sort();
+}
+
+function getTabFilteredOwnTasks() {
+    if (currentTab === "完了") return tasks.filter((t) => t.archived);
+    if (currentTab === "すべて") return tasks.filter((t) => !t.archived);
+    return tasks.filter((t) => t.category === currentTab && !t.archived);
+}
+
+function getTabFilteredExternalTasks() {
+    if (currentTab === "完了") return externalTasks.filter((t) => t.archived);
+    if (currentTab === "すべて") return externalTasks.filter((t) => !t.archived);
+    return externalTasks.filter((t) => !t.archived && t.category === currentTab);
+}
+
+function buildMergedDisplayRows(ownRows, externalRows) {
+    const mode = externalOwnerFilterMode;
+    if (!externalTasks.length) return ownRows.concat(externalRows);
+    if (mode === "external-all") return externalRows.slice();
+    if (mode && mode !== "merged") {
+        return externalRows.filter((t) => String(t.__externalOwnerId || "") === mode);
+    }
+    return ownRows.concat(externalRows);
 }
 
 function getVersionHistoryForDisplay() {
@@ -1400,30 +1494,53 @@ function closeVersionHistoryModal() {
     updateBodyScrollLock();
 }
 
-function syncExternalOwnerFilterButton() {
-    const btn = document.getElementById("btnExternalOwnerFilter");
-    if (!btn) return;
-    const oid = getExternalCsvOwnerId();
-    if (!oid || externalTasks.length === 0) {
-        btn.style.display = "none";
-        externalOwnerFilterActive = false;
-        btn.classList.remove("btn-external-filter-active");
+function syncExternalOwnerFilterUi() {
+    const sel = document.getElementById("externalOwnerFilterSelect");
+    if (!sel) return;
+    const owners = getExternalCsvOwnerIds();
+    if (!owners.length) {
+        sel.style.display = "none";
+        externalOwnerFilterMode = "merged";
+        sel.classList.remove("external-owner-filter-active");
         return;
     }
-    btn.style.display = "";
-    btn.textContent = `（${oid}）のみ表示`;
-    btn.setAttribute("aria-pressed", externalOwnerFilterActive ? "true" : "false");
-    btn.classList.toggle("btn-external-filter-active", externalOwnerFilterActive);
+    sel.style.display = "";
+    const prev = sel.value;
+    sel.innerHTML = "";
+    const optMerged = document.createElement("option");
+    optMerged.value = "merged";
+    optMerged.textContent = "自分のタスク＋外部CSV（全担当）";
+    sel.appendChild(optMerged);
+    const optAllExt = document.createElement("option");
+    optAllExt.value = "external-all";
+    optAllExt.textContent = "外部CSVのみ（全担当）";
+    sel.appendChild(optAllExt);
+    owners.forEach((oid) => {
+        const o = document.createElement("option");
+        o.value = oid;
+        o.textContent = `（${oid}）のみ表示`;
+        sel.appendChild(o);
+    });
+    const valid = ["merged", "external-all", ...owners];
+    sel.value = valid.includes(prev) ? prev : "merged";
+    if (!valid.includes(sel.value)) sel.value = "merged";
+    externalOwnerFilterMode = sel.value;
+    sel.classList.toggle("external-owner-filter-active", externalOwnerFilterMode !== "merged");
 }
 
-function toggleExternalOwnerFilter() {
-    if (!externalTasks.length) return;
-    externalOwnerFilterActive = !externalOwnerFilterActive;
-    syncExternalOwnerFilterButton();
+function onExternalOwnerFilterChange() {
+    const sel = document.getElementById("externalOwnerFilterSelect");
+    if (!sel) return;
+    externalOwnerFilterMode = sel.value || "merged";
+    syncExternalOwnerFilterUi();
     renderAll();
     if (typeof renderTimeline === "function") renderTimeline();
-    const oid = getExternalCsvOwnerId();
-    showToast(externalOwnerFilterActive ? `（${oid}）の行のみ表示中` : "通常表示に戻しました");
+    const labels = {
+        merged: "自分のタスクと外部CSV（全担当）を表示中",
+        "external-all": "外部CSVのみ（全担当）を表示中",
+    };
+    const msg = labels[externalOwnerFilterMode] || `（${externalOwnerFilterMode}）の外部CSVのみ表示中`;
+    showToast(msg);
 }
 
 function getListFamiliesWithChildren(pool) {
@@ -1526,6 +1643,7 @@ function cancelTask(id) {
             c.status = "中止";
             c.progressUpdatedAt = nowIso;
         });
+        applyParentStatusFromChildrenForFamily(familyKey);
         save();
         renderAll();
         if (typeof renderTimeline === "function") renderTimeline();
@@ -1536,6 +1654,7 @@ function cancelTask(id) {
     if (!confirm(`「${label}」を中止しますか？\n進捗は「中止」になり、完了と同様に履歴へ移動できます。`)) return;
     task.status = "中止";
     task.progressUpdatedAt = nowIso;
+    applyParentStatusFromChildrenForFamily(getTaskFamilyKey(task));
     save();
     renderAll();
     if (typeof renderTimeline === "function") renderTimeline();
@@ -2324,7 +2443,9 @@ function saveSettings() {
 
 function clearExternalView() {
     externalTasks = [];
+    externalOwnerFilterMode = "merged";
     showToast("外部CSVの表示をクリアしました");
+    syncExternalOwnerFilterUi();
     renderAll();
 }
 
@@ -2339,7 +2460,10 @@ function isExternalTask(task) {
 
 function getDisplayTaskCode(task) {
     if (!task) return "-";
-    if (isExternalTask(task)) return "******";
+    if (isExternalTask(task)) {
+        const oid = String(task.__externalOwnerId || "").trim();
+        return oid ? `（${oid}）******` : "******";
+    }
     return task.taskCode || "-";
 }
 
@@ -2380,23 +2504,11 @@ function renderAll() {
         archiveBtn.className = hasCompleted ? 'btn-archive-active' : 'btn-archive-disabled';
     }
 
-    // 1. フィルタリング（二重定義エラーを解消済み）
-    let filtered = (currentTab === "完了") ? tasks.filter(t => t.archived) :
-        (currentTab === "すべて") ? tasks.filter(t => !t.archived) :
-            tasks.filter(t => t.category === currentTab && !t.archived);
+    const filtered = getTabFilteredOwnTasks();
+    const externalFiltered = getTabFilteredExternalTasks();
+    let displayRows = buildMergedDisplayRows(filtered, externalFiltered);
 
-    const externalFiltered = (currentTab === "完了")
-        ? externalTasks.filter(t => t.archived)
-        : (currentTab === "すべて")
-            ? externalTasks.filter(t => !t.archived)
-            : externalTasks.filter(t => !t.archived && t.category === currentTab);
-
-    let displayRows = filtered.concat(externalFiltered);
-    if (externalOwnerFilterActive && externalTasks.length > 0) {
-        displayRows = externalFiltered;
-    }
-
-    syncExternalOwnerFilterButton();
+    syncExternalOwnerFilterUi();
     updateListAccordionBulkStateFromCollapsed();
 
     const searchQuery = getSearchQueryLower();
@@ -2460,12 +2572,7 @@ function renderAll() {
                 progressLabel = ` (${completedCount}/${subTasks.length}) ${percent}%`;
                 // 自動ステータス同期
                 if (!isExt) {
-                    if (percent === 100) {
-                        // 子がすべて終端でもテーマ完了とはみなさず、親は計画停止（中止）として表示
-                        task.status = "中止";
-                    } else if (isTerminalTaskStatus(task.status)) {
-                        task.status = "進行中";
-                    }
+                    applyParentStatusFromChildrenForFamily(familyKey);
                 }
             }
         }
@@ -2745,6 +2852,30 @@ function switchView(viewName) {
 }
 
 
+function getTimelineMonthIsoRange(monthIdx, timelineStartDate) {
+    const mDate = new Date(timelineStartDate.getFullYear(), timelineStartDate.getMonth() + monthIdx, 1);
+    return {
+        monthStart: dateToIsoLocal(mDate),
+        monthEnd: dateToIsoLocal(new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0)),
+    };
+}
+
+function taskOverlapsTimelineMonth(task, monthIdx, timelineStartDate) {
+    const { monthStart, monthEnd } = getTimelineMonthIsoRange(monthIdx, timelineStartDate);
+    const s = task.startDate || task.deadline;
+    const e = task.deadline || task.startDate;
+    if (!s && !e) return false;
+    const start = s || e;
+    const end = e || s;
+    return start <= monthEnd && end >= monthStart;
+}
+
+/** 当該月に未完了タスクの期間が重なるか */
+function timelineMonthHasIncompleteTasks(monthIdx, timelineStartDate) {
+    const pool = tasks.concat(externalTasks).filter((t) => !t.archived);
+    return pool.some((t) => !isTerminalTaskStatus(t.status) && taskOverlapsTimelineMonth(t, monthIdx, timelineStartDate));
+}
+
 // 月の開閉を切り替える関数
 function toggleMonth(mIdx) {
     if (forcedCollapsedMonths && forcedCollapsedMonths.has(mIdx)) return;
@@ -2869,7 +3000,8 @@ function renderTimeline() {
     const monthsCount = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth()) + 1;
     collapsedMonths = collapsedMonths.filter(i => i >= 0 && i < monthsCount);
 
-    // 今日の月を起点に N か月だけ操作可能にし、それ以外は折りたたみ固定（+グレーアウト）
+    // 今日の月から N か月先まで操作可能。それより先の未来月のみ折りたたみ固定
+    // 過去月は 3/6/9/12 か月表示とは別に、未完了タスクがある月は常に展開
     const baseIndex = (() => {
         const diff = (baseStart.getFullYear() - startDate.getFullYear()) * 12 + (baseStart.getMonth() - startDate.getMonth());
         return Math.max(0, Math.min(monthsCount - 1, diff));
@@ -2877,7 +3009,7 @@ function renderTimeline() {
     const endIndexExclusive = Math.min(monthsCount, baseIndex + timelineMonthRange);
     forcedCollapsedMonths = new Set();
     for (let mi = 0; mi < monthsCount; mi++) {
-        if (mi < baseIndex || mi >= endIndexExclusive) forcedCollapsedMonths.add(mi);
+        if (mi >= endIndexExclusive) forcedCollapsedMonths.add(mi);
     }
 
     let gridTotalWidth = 0;
@@ -2936,7 +3068,7 @@ function renderTimeline() {
             mLabel.onclick = null;
             mLabel.setAttribute(
                 "data-help",
-                `月の折りたたみ（制限中）：表示範囲（${timelineMonthRange}か月）外のため固定で折りたたみです`
+                `月の折りたたみ（制限中）：表示範囲（今日から${timelineMonthRange}か月）より先の月のため固定で折りたたみです`
             );
         } else {
             mLabel.onclick = () => toggleMonth(i);
@@ -2999,7 +3131,16 @@ function renderTimeline() {
             : "";
 
     // --- 4. タスク行の描画 ---
-    const timelineTasks = tasks.concat(externalTasks).filter(t => !t.archived && (t.startDate || t.deadline || t.msDate));
+    const ownTl = getTabFilteredOwnTasks().filter((t) => t.startDate || t.deadline || t.msDate);
+    const extTl = getTabFilteredExternalTasks().filter((t) => t.startDate || t.deadline || t.msDate);
+    let timelineTasks = buildMergedDisplayRows(ownTl, extTl);
+
+    const searchQueryTl = getSearchQueryLower();
+    const searchFamilyKeysTl = getSearchMatchingFamilyKeys(timelineTasks, searchQueryTl);
+    if (searchFamilyKeysTl) {
+        timelineTasks = timelineTasks.filter((t) => searchFamilyKeysTl.has(getTaskFamilyKey(t)));
+    }
+
     let lastThemeRootTimeline = "";
     let useGreenBackgroundTimeline = false;
     let hasAnimateIn = false; // row-animate-in が付く場合だけ依存線を遅延描画
@@ -3015,9 +3156,10 @@ function renderTimeline() {
             lastThemeRootTimeline = familyKey;
         }
 
-        const isCollapsedT = (typeof collapsedThemesTimeline !== 'undefined') && collapsedThemesTimeline.includes(familyKey);
+        const isCollapsedT = (typeof collapsedThemesTimeline !== "undefined") && collapsedThemesTimeline.includes(familyKey);
+        const showDespiteCollapseTl = searchFamilyKeysTl && searchFamilyKeysTl.has(familyKey);
         const rowBgColor = useGreenBackgroundTimeline ? "var(--app-row-alt)" : "var(--app-row-base)";
-        if (!isParent && isCollapsedT) return;
+        if (!isParent && isCollapsedT && !showDespiteCollapseTl) return;
 
         let progressLabel = "";
         if (isParent) {
@@ -3051,10 +3193,11 @@ function renderTimeline() {
                 ? `<span class="external-lock" style="margin-right:4px;"${helpAttr("外部CSV：タイムライン上も閲覧専用です")}>🔒</span>`
                 : "";
             labelHTML = hasChildren
-                ? `<span class="accordion-btn" onclick="toggleTimelineAccordion('${task.id}'); event.stopPropagation();" style="margin-right:5px;"${helpAttr("アコーディオン（タイムライン）：子の行表示を開閉します")}>${toggleIcon}</span>${lockHtml}<strong>${rootName}${progressLabel}</strong>`
-                : `<span class="accordion-btn accordion-btn-disabled" style="margin-right:5px;"${helpAttr("アコーディオン：子タスクがないため開閉できません")}>＋</span>${lockHtml}<strong>${rootName}${progressLabel}</strong>`;
+                ? `<span class="accordion-btn" onclick="toggleTimelineAccordion('${task.id}'); event.stopPropagation();" style="margin-right:5px;"${helpAttr("アコーディオン（タイムライン）：子の行表示を開閉します")}>${toggleIcon}</span>${lockHtml}<strong class="tl-parent-label--ellipsis-tip">${rootName}${progressLabel}</strong>`
+                : `<span class="accordion-btn accordion-btn-disabled" style="margin-right:5px;"${helpAttr("アコーディオン：子タスクがないため開閉できません")}>＋</span>${lockHtml}<strong class="tl-parent-label--ellipsis-tip">${rootName}${progressLabel}</strong>`;
         } else {
-            labelHTML = `<span class="tl-label-child-row"><span class="tl-child-detail">${getSecondaryStep(task) || "詳細未入力"}</span>${scheduleSignalIconHtml(scheduleSigTl, "tl")}</span>`;
+            const childLabel = getSecondaryStep(task) || "詳細未入力";
+            labelHTML = `<span class="tl-label-child-row"><span class="tl-child-detail tl-child-detail--ellipsis-tip">${childLabel}</span>${scheduleSignalIconHtml(scheduleSigTl, "tl")}</span>`;
         }
 
         const displayLabel = isParent
@@ -3166,6 +3309,7 @@ function renderTimeline() {
                 bar.style.padding = "0 5px";
                 bar.style.borderRadius = "3px";
                 bar.style.overflow = "hidden";
+                bar.classList.add("timeline-bar--ellipsis-tip");
                 bar.innerText = displayLabel;
             } else {
                 bar.classList.add("timeline-bar--pdca");
@@ -3214,7 +3358,7 @@ function renderTimeline() {
                 bar.appendChild(planLayer);
 
                 let labelEl = document.createElement("div");
-                labelEl.className = "timeline-bar-label";
+                labelEl.className = "timeline-bar-label timeline-bar-label--ellipsis-tip";
                 labelEl.textContent = displayLabel;
 
                 if (hasAct && task.deadline) {
@@ -3327,7 +3471,8 @@ function renderTimeline() {
                     "white-space:nowrap",
                     "overflow:hidden",
                     "text-overflow:ellipsis",
-                    "pointer-events:none",
+                    "pointer-events:auto",
+                    "cursor:default",
                     "z-index:10",
                     isCompleted
                         ? "color:rgba(90,90,90,0.98);text-shadow:0 0 2px #fff,0 0 4px rgba(255,255,255,0.85)"
@@ -4056,8 +4201,10 @@ function cycleStatus(id) {
         const idx = statusList.indexOf(task.status);
         task.status = statusList[(idx + 1) % statusList.length];
         task.progressUpdatedAt = dateToIsoLocal(new Date());
+        applyParentStatusFromChildrenForFamily(getTaskFamilyKey(task));
     }
-    save(); renderAll();
+    save();
+    renderAll();
 }
 
 function deleteTask(id) {
@@ -4999,9 +5146,12 @@ function importCSV(event) {
         const isExternal = !!(incomingOwner && ownerId && incomingOwner !== ownerId);
 
         if (isExternal) {
-            // 外部表示用のフラグを付けて保持（保存しない）
+            // 外部表示用のフラグを付けて保持（保存しない）。同一担当者は上書き、別担当者は追加
             const ns = `EXT${incomingOwner}_`;
-            externalTasks = imported.map(t => {
+            const withoutSameOwner = externalTasks.filter(
+                (t) => String(t.__externalOwnerId || "") !== incomingOwner
+            );
+            const importedExternal = imported.map((t) => {
                 const code = String(t.taskCode || "").trim();
                 if (!code || !code.includes("-")) {
                     return {
@@ -5021,9 +5171,12 @@ function importCSV(event) {
                     __externalOwnerId: incomingOwner
                 };
             });
-            showToast(`外部CSV（${incomingOwner}）を表示中（閲覧専用）`);
-            externalOwnerFilterActive = false;
-            syncExternalOwnerFilterButton();
+            externalTasks = withoutSameOwner.concat(importedExternal);
+            const ownerCount = getExternalCsvOwnerIds().length;
+            showToast(
+                `外部CSV（${incomingOwner}）を取り込みました（閲覧専用・登録担当${ownerCount}名）`
+            );
+            syncExternalOwnerFilterUi();
             renderAll();
             event.target.value = "";
             return;
