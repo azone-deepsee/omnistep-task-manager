@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PBPM 操作手順書</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;font-size:15px;}
+body{font-family:"Hiragino Kaku Gothic ProN","Meiryo","Noto Sans JP",sans-serif;color:#1a1a1a;background:#f5f5f5;line-height:1.75;}
+a{color:#1565c0;text-decoration:none;}
+a:hover{text-decoration:underline;}
+.manual-header{background:linear-gradient(135deg,#1a237e 0%,#283593 100%);color:#fff;padding:28px 32px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.25);}
+.manual-header h1{font-size:1.5rem;font-weight:700;letter-spacing:.05em;}
+.manual-header .subtitle{font-size:.85rem;opacity:.85;margin-top:4px;}
+.layout{display:flex;max-width:1280px;margin:0 auto;gap:0;}
+.sidebar{width:280px;min-width:280px;background:#fff;border-right:1px solid #ddd;position:sticky;top:80px;height:calc(100vh - 80px);overflow-y:auto;padding:16px 0;font-size:.82rem;z-index:50;}
+.sidebar::-webkit-scrollbar{width:5px;}
+.sidebar::-webkit-scrollbar-thumb{background:#bbb;border-radius:3px;}
+.toc-part{padding:0 16px;margin-bottom:6px;}
+.toc-part-title{font-weight:700;font-size:.9rem;color:#1a237e;padding:8px 0 4px;border-bottom:2px solid #c5cae9;margin-bottom:4px;}
+.toc-part-title.part-b{color:#bf360c;border-color:#ffccbc;}
+.toc-link{display:block;padding:4px 8px;border-radius:4px;color:#333;transition:background .15s;}
+.toc-link:hover{background:#e8eaf6;text-decoration:none;}
+.toc-link.toc-b:hover{background:#fbe9e7;}
+.main{flex:1;min-width:0;padding:32px 40px 80px;}
+.part-heading{font-size:1.35rem;font-weight:700;padding:14px 20px;border-radius:6px;margin:32px 0 20px;color:#fff;}
+.part-heading.a{background:linear-gradient(90deg,#1a237e,#3949ab);}
+.part-heading.b{background:linear-gradient(90deg,#bf360c,#e64a19);}
+.part-heading:first-child{margin-top:0;}
+.section{background:#fff;border-radius:8px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden;border-left:4px solid #3949ab;}
+.section.b-card{border-left-color:#e64a19;}
+.section-toggle{width:100%;text-align:left;border:none;background:none;padding:14px 20px;cursor:pointer;font-size:1rem;font-weight:600;color:#222;display:flex;align-items:center;gap:10px;transition:background .15s;}
+.section-toggle:hover{background:#f0f0f0;}
+.section-toggle .chevron{font-size:.75rem;transition:transform .25s;color:#888;flex-shrink:0;}
+.section-toggle .chevron.open{transform:rotate(90deg);}
+.section-toggle .badge{font-size:.7rem;background:#e8eaf6;color:#283593;padding:2px 8px;border-radius:10px;margin-left:auto;flex-shrink:0;}
+.section.b-card .section-toggle .badge{background:#fbe9e7;color:#bf360c;}
+.section-body{display:none;padding:0 20px 18px;animation:fadeIn .25s;}
+.section-body.show{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
+.when{background:#e3f2fd;border-left:3px solid #1565c0;padding:8px 14px;border-radius:0 4px 4px 0;margin:10px 0 14px;font-size:.88rem;color:#0d47a1;}
+.when::before{content:"▶ いつ使う？";font-weight:700;display:block;margin-bottom:2px;font-size:.78rem;}
+.steps{counter-reset:step;margin:0 0 12px;padding:0;}
+.steps li{list-style:none;counter-increment:step;padding:6px 0 6px 36px;position:relative;border-bottom:1px dotted #e0e0e0;}
+.steps li:last-child{border-bottom:none;}
+.steps li::before{content:counter(step);position:absolute;left:0;top:6px;width:26px;height:26px;background:#3949ab;color:#fff;border-radius:50%;font-size:.78rem;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.section.b-card .steps li::before{background:#e64a19;}
+.tip{background:#fff8e1;border-left:3px solid #f9a825;padding:8px 14px;border-radius:0 4px 4px 0;margin:10px 0;font-size:.85rem;}
+.tip::before{content:"💡 ポイント";font-weight:700;display:block;margin-bottom:2px;font-size:.78rem;color:#f57f17;}
+.warn{background:#fce4ec;border-left:3px solid #c62828;padding:8px 14px;border-radius:0 4px 4px 0;margin:10px 0;font-size:.85rem;}
+.warn::before{content:"⚠ 注意";font-weight:700;display:block;margin-bottom:2px;font-size:.78rem;color:#c62828;}
+.example{background:#f3e5f5;border-left:3px solid #7b1fa2;padding:8px 14px;border-radius:0 4px 4px 0;margin:10px 0;font-size:.85rem;}
+.example::before{content:"📋 例";font-weight:700;display:block;margin-bottom:2px;font-size:.78rem;color:#7b1fa2;}
+kbd{background:#eee;border:1px solid #ccc;border-radius:3px;padding:1px 5px;font-size:.82rem;font-family:inherit;}
+strong{color:#1a237e;}
+.section.b-card strong{color:#bf360c;}
+.manual-footer{text-align:center;padding:24px;font-size:.8rem;color:#888;border-top:1px solid #ddd;background:#fff;margin-top:40px;}
+@media(max-width:860px){
+  .sidebar{display:none;}
+  .main{padding:20px 16px 60px;}
+  .manual-header{padding:16px;}
+  .manual-header h1{font-size:1.2rem;}
+}
+@media print{
+  .sidebar{display:none;}
+  .manual-header{position:relative;background:#1a237e !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .section-body{display:block !important;}
+  .section{break-inside:avoid;box-shadow:none;border:1px solid #ccc;}
+  .layout{display:block;}
+  .main{padding:10px;}
+  body{font-size:12px;background:#fff;}
+}
+</style>
+</head>
+<body>
+
+<header class="manual-header">
+  <h1>PBPM 操作手順書</h1>
+  <div class="subtitle">Personal Business Project Manager ─ 機能別リファレンスガイド</div>
+</header>
+
+<div class="layout">
+
+<nav class="sidebar" id="sidebar">
+  <div class="toc-part">
+    <div class="toc-part-title">Aパート：基本操作</div>
+    <a class="toc-link" href="#a01">A-01 担当者IDの登録</a>
+    <a class="toc-link" href="#a02">A-02 新規テーマの登録</a>
+    <a class="toc-link" href="#a03">A-03 子タスクの追加</a>
+    <a class="toc-link" href="#a04">A-04 期間（着手日・納期）の設定</a>
+    <a class="toc-link" href="#a05">A-05 年間日程マスター</a>
+    <a class="toc-link" href="#a06">A-06 タイムライン表示</a>
+    <a class="toc-link" href="#a07">A-07 進捗の管理</a>
+    <a class="toc-link" href="#a08">A-08 メモの記録</a>
+    <a class="toc-link" href="#a09">A-09 履歴への移動（アーカイブ）</a>
+    <a class="toc-link" href="#a10">A-10 CSV出力</a>
+    <a class="toc-link" href="#a11">A-11 CSV取込</a>
+    <a class="toc-link" href="#a12">A-12 テンプレート保存・読込</a>
+    <a class="toc-link" href="#a13">A-13 タスク検索</a>
+    <a class="toc-link" href="#a14">A-14 アコーディオン開閉</a>
+    <a class="toc-link" href="#a15">A-15 依存連携（fFlag）</a>
+    <a class="toc-link" href="#a16">A-16 ヘルプ表示（？ボタン）</a>
+  </div>
+  <div class="toc-part">
+    <div class="toc-part-title part-b">Bパート：裏技事典</div>
+    <a class="toc-link toc-b" href="#b01">B-01 親の着手日 → 子へ自動連番</a>
+    <a class="toc-link toc-b" href="#b02">B-02 子の並べ替えで依存自動解除</a>
+    <a class="toc-link toc-b" href="#b03">B-03 バー移動で実績も追従</a>
+    <a class="toc-link toc-b" href="#b04">B-04 外部CSV担当者フィルタ</a>
+    <a class="toc-link toc-b" href="#b05">B-05 テーマ名・表題の直接編集</a>
+    <a class="toc-link toc-b" href="#b06">B-06 子の全完了で親ステータス自動変化</a>
+    <a class="toc-link toc-b" href="#b07">B-07 ◇/★ 期間外の警告</a>
+    <a class="toc-link toc-b" href="#b08">B-08 テンプレ取込の重複処理</a>
+    <a class="toc-link toc-b" href="#b09">B-09 期間リセット</a>
+    <a class="toc-link toc-b" href="#b10">B-10 テーマ色の変更</a>
+    <a class="toc-link toc-b" href="#b11">B-11 進捗シグナル ⚠🚀✨</a>
+    <a class="toc-link toc-b" href="#b12">B-12 実績修正モード（PDCA）</a>
+    <a class="toc-link toc-b" href="#b13">B-13 テーマ期間カレンダー</a>
+  </div>
+</nav>
+
+<main class="main">
+
+<div class="part-heading a" id="partA">Aパート：基本操作</div>
+
+<!-- A-01 -->
+<div class="section" id="a01">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-01 担当者IDの登録 <span class="badge">最初に1回</span>
+</button>
+<div class="section-body">
+  <div class="when">アプリを初めて使うとき。IDが未設定だとCSVの入出力で自他の区別ができません。</div>
+  <ol class="steps">
+    <li>画面右上の <kbd>⚙</kbd>（設定）ボタンをクリック</li>
+    <li>「担当者ID（6桁）」に自分の番号を入力（例：<code>001234</code>）</li>
+    <li>「担当者」に表示用の名前を入力</li>
+    <li><kbd>保存</kbd> をクリック</li>
+  </ol>
+  <div class="tip">6桁に満たない場合は先頭にゼロが自動で付きます（例：<code>123</code> → <code>000123</code>）。</div>
+  <div class="warn">IDを後から変えると、過去に出力したCSVとの紐付けがずれます。最初に決めたら変えないのが安全です。</div>
+</div>
+</div>
+
+<!-- A-02 -->
+<div class="section" id="a02">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-02 新規テーマの登録 <span class="badge">作業の起点</span>
+</button>
+<div class="section-body">
+  <div class="when">新しい業務テーマやプロジェクトを始めるとき。</div>
+  <ol class="steps">
+    <li><kbd>＋新規テーマ登録</kbd> ボタンをクリック</li>
+    <li>カテゴリを選択（設定で名前・表示/非表示を変更可能）</li>
+    <li>テーマ名を入力（必須。ここが親タスクの名称になる）</li>
+    <li>必要に応じて着手日・完了日・展開（◇）・イベント（☆）を設定</li>
+    <li>「最初の子タスク」欄に1件目の子の内容を入力（任意）</li>
+    <li><kbd>登録する</kbd> をクリック</li>
+  </ol>
+  <div class="tip">最初の子タスクを入れると、着手日・完了日はその子に付きます。子が空なら親に直接付きます。</div>
+</div>
+</div>
+
+<!-- A-03 -->
+<div class="section" id="a03">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-03 子タスクの追加 <span class="badge">日常操作</span>
+</button>
+<div class="section-body">
+  <div class="when">テーマの下に具体的な作業工程を追加するとき。</div>
+  <ol class="steps">
+    <li>リスト表示で、追加したいテーマの親行を見つける</li>
+    <li>テーマ/課題列の <kbd>＋子タスク追加</kbd> ボタンをクリック</li>
+    <li>新しい行が末尾に追加されるので、業務内容を入力</li>
+    <li>着手日・納期・進捗を必要に応じて設定</li>
+  </ol>
+  <div class="tip">子タスクは親と同じカテゴリを自動で継承します。親のカテゴリを変更すると子もすべて変わります。</div>
+</div>
+</div>
+
+<!-- A-04 -->
+<div class="section" id="a04">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-04 期間（着手日・納期）の設定 <span class="badge">日常操作</span>
+</button>
+<div class="section-body">
+  <div class="when">タスクのスケジュールを設定・変更するとき。</div>
+  <ol class="steps">
+    <li>リスト表示の「着手」列で日付をクリック → カレンダーから選択</li>
+    <li>「納期」列で同様にクリック → カレンダーから選択</li>
+    <li>タイムラインでもバーをドラッグして期間を移動できる（子タスクのみ）</li>
+    <li>バー右端のハンドルをドラッグすると納期だけ伸縮する</li>
+  </ol>
+  <div class="tip">着手日を入れると、納期が空なら同じ日に自動設定されます。納期を着手日より前にはできません。</div>
+  <div class="warn">期限を過ぎると行が赤くなります（期限切れ表示）。進捗を「完了」にすれば解除されます。</div>
+</div>
+</div>
+
+<!-- A-05 -->
+<div class="section" id="a05">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-05 年間日程マスター <span class="badge">設定系</span>
+</button>
+<div class="section-body">
+  <div class="when">棚卸・連休・発表会など全テーマ共通の基準日を管理するとき。</div>
+  <ol class="steps">
+    <li>ヘッダーの <kbd>📅 年間日程</kbd> ボタンをクリック</li>
+    <li>「イベント名」と「日付」を入力して <kbd>追加</kbd></li>
+    <li>追加した項目は一覧に表示され、インラインで名称・日付を編集可能</li>
+    <li>タスクの「展開（◇）」や「イベント（☆）」のドロップダウンにマスターの候補が表示される</li>
+  </ol>
+  <div class="tip">マスターの日付を変更すると、タスク側で同じ名称を選択している◇/★の日付も連動して変わります。</div>
+  <div class="example">例：「棚卸」=9/30 を登録 → テーマAの☆に「棚卸」を選択 → 自動的に9/30が入る。後で「棚卸」を10/3に変更 → テーマAの☆も10/3に連動。</div>
+</div>
+</div>
+
+<!-- A-06 -->
+<div class="section" id="a06">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-06 タイムライン表示 <span class="badge">俯瞰</span>
+</button>
+<div class="section-body">
+  <div class="when">全テーマの期間をガント風に俯瞰・調整するとき。</div>
+  <ol class="steps">
+    <li>ビュー切替の <kbd>📅 タイムライン</kbd> ボタンをクリック</li>
+    <li>左側にテーマ・子タスクの名前、右側に期間バーが表示される</li>
+    <li>表示範囲を <kbd>3か月</kbd>〜<kbd>12か月</kbd> で切り替え</li>
+    <li>月ヘッダーの <kbd>＋</kbd>/<kbd>−</kbd> で月ごとに折りたたみ可能</li>
+    <li>バーの上にホバーするとツールチップ（着手日〜納期・日数）が表示される</li>
+  </ol>
+  <div class="tip">赤い縦線が「今日」。日曜は薄い帯、土曜は点線で区別されます。親バーは子の集約表示で、直接ドラッグしません。</div>
+  <div class="warn">タイムラインで子バーをドラッグすると<strong>即座にデータが変更・保存</strong>されます。元に戻す機能はないため注意してください。</div>
+</div>
+</div>
+
+<!-- A-07 -->
+<div class="section" id="a07">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-07 進捗の管理 <span class="badge">日常操作</span>
+</button>
+<div class="section-body">
+  <div class="when">作業の進行状況を記録・更新するとき。</div>
+  <ol class="steps">
+    <li>子タスクの「進捗」列のボタンをクリック</li>
+    <li>クリックごとに <strong>未着手 → 調査中 → 進行中 → 修正中 → 完了</strong> の順に切り替わる</li>
+    <li>親タスクのボタンは <strong>進行中 ⇔ 修正中</strong> のみ切り替え</li>
+  </ol>
+  <div class="tip">親行に表示される「(2/5) 40%」は、子タスクの完了数と進捗率を自動計算した結果です。</div>
+</div>
+</div>
+
+<!-- A-08 -->
+<div class="section" id="a08">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-08 メモの記録 <span class="badge">日常操作</span>
+</button>
+<div class="section-body">
+  <div class="when">タスクに詳細な備考や補足を残したいとき。</div>
+  <ol class="steps">
+    <li>操作列の <kbd>🖋</kbd>（メモ未入力）または <kbd>📝</kbd>（メモあり）アイコンをクリック</li>
+    <li>メモ入力ウィンドウが開くので、内容を入力</li>
+    <li><kbd>保存</kbd> をクリック → アイコンが 📝 に変わる</li>
+  </ol>
+  <div class="tip">メモはCSV出力にも含まれます。改行はCSV内ではスペースに変換されます。</div>
+</div>
+</div>
+
+<!-- A-09 -->
+<div class="section" id="a09">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-09 履歴への移動（アーカイブ） <span class="badge">完了後</span>
+</button>
+<div class="section-body">
+  <div class="when">完了したテーマを一覧から整理するとき。</div>
+  <ol class="steps">
+    <li>テーマ内の子タスクをすべて「完了」または「中止」にする</li>
+    <li>親の進捗が自動で「完了」になったことを確認</li>
+    <li>ツールバーの <kbd>履歴へ移動</kbd> をクリック</li>
+    <li>確認ダイアログで対象テーマを確認し、OK</li>
+    <li>「完了履歴」タブに移動される</li>
+  </ol>
+  <div class="tip">履歴から戻したいときは「完了履歴」タブで、子タスクの <kbd>↺</kbd> ボタンをクリックすると親子ごと一覧に復帰します。</div>
+</div>
+</div>
+
+<!-- A-10 -->
+<div class="section" id="a10">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-10 CSV出力 <span class="badge">バックアップ</span>
+</button>
+<div class="section-body">
+  <div class="when">データのバックアップや他のスタッフとの共有をするとき。</div>
+  <ol class="steps">
+    <li>出力したいテーマの親行に <strong>チェック</strong> を入れる（複数選択可）</li>
+    <li>ツールバーの <kbd>CSV出力</kbd> をクリック</li>
+    <li>確認ダイアログで対象を確認し、OK</li>
+    <li>CSVファイルがダウンロードされる</li>
+  </ol>
+  <div class="tip">CSVには担当者ID（OwnerID列）が含まれます。このIDで、取込み時に「自分の」「他人の」データが判別されます。</div>
+  <div class="warn">担当者IDが未設定だとCSV出力できません。先に A-01 を済ませてください。</div>
+</div>
+</div>
+
+<!-- A-11 -->
+<div class="section" id="a11">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-11 CSV取込 <span class="badge">データ連携</span>
+</button>
+<div class="section-body">
+  <div class="when">バックアップの復元や、他スタッフのCSVを参照するとき。</div>
+  <ol class="steps">
+    <li>ツールバーの <kbd>CSV取込</kbd> をクリック → ファイル選択が開く</li>
+    <li>CSVファイルを選択</li>
+    <li>OwnerIDが<strong>自分と一致</strong>する場合 → 本体データとして取り込み（重複があれば上書き確認）</li>
+    <li>OwnerIDが<strong>自分と異なる</strong>場合 → 🔒外部CSV（閲覧専用）として表示</li>
+  </ol>
+  <div class="tip">外部CSVは保存データには混ざりません。「外部表示をクリア」で消去できます。</div>
+  <div class="warn">旧形式（「内容」「課題」列）のCSVも自動判別して取り込めますが、新形式でのバックアップを推奨します。</div>
+</div>
+</div>
+
+<!-- A-12 -->
+<div class="section" id="a12">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-12 テンプレート保存・読込 <span class="badge">繰り返し業務</span>
+</button>
+<div class="section-body">
+  <div class="when">毎年繰り返す業務の構成を雛形として残したいとき。</div>
+  <h4 style="margin:12px 0 6px;">▼ テンプレート保存</h4>
+  <ol class="steps">
+    <li>ヘッダーの <kbd>テンプレート保存</kbd> をクリック</li>
+    <li>テンプレート名を入力 → CSV がダウンロードされる</li>
+  </ol>
+  <h4 style="margin:12px 0 6px;">▼ テンプレート読込</h4>
+  <ol class="steps">
+    <li>ヘッダーの <kbd>テンプレート読込</kbd> をクリック</li>
+    <li>ファイル選択でテンプレートCSVを開く</li>
+    <li>グループ名（先頭に付く文字列）を入力 → 表題変更の確認</li>
+    <li>新規テーマとして一覧に追加される</li>
+  </ol>
+  <div class="tip">テンプレートは日付・進捗をすべて空にした構成だけを保存します。読込時にマスター日程があれば◇/★の日付を自動補完します。</div>
+</div>
+</div>
+
+<!-- A-13 -->
+<div class="section" id="a13">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-13 タスク検索 <span class="badge">探す</span>
+</button>
+<div class="section-body">
+  <div class="when">大量のタスクから特定のテーマや内容を探すとき。</div>
+  <ol class="steps">
+    <li>リスト表示の上部にある検索ボックスにキーワードを入力</li>
+    <li>テーマ名・子タスク名・カテゴリ・メモなどから一致するものを検索</li>
+    <li>ヒットした子タスクを含む<strong>テーマ全体</strong>（親＋全子）が表示される</li>
+  </ol>
+  <div class="tip">検索はリスト表示・タイムライン表示の両方に反映されます。検索中はチェックボックスの一括操作が無効になります。</div>
+</div>
+</div>
+
+<!-- A-14 -->
+<div class="section" id="a14">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-14 アコーディオン開閉 <span class="badge">表示整理</span>
+</button>
+<div class="section-body">
+  <div class="when">テーマが多いときに子タスクを折りたたんで見通しをよくしたいとき。</div>
+  <ol class="steps">
+    <li>テーマの <kbd>－</kbd> ボタンをクリック → 子タスクが非表示になる</li>
+    <li><kbd>＋</kbd> をクリック → 再び表示される</li>
+    <li>列ヘッダーの <kbd>－</kbd>（一括閉じ）で全テーマを一度に折りたたみ</li>
+  </ol>
+  <div class="tip">リスト表示とタイムライン表示で開閉状態は独立しています。それぞれ別々に操作できます。</div>
+</div>
+</div>
+
+<!-- A-15 -->
+<div class="section" id="a15">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-15 依存連携（fFlag） <span class="badge">スケジュール管理</span>
+</button>
+<div class="section-body">
+  <div class="when">「タスクBはタスクAが終わるまで着手できない」という順序関係を設定するとき。</div>
+  <ol class="steps">
+    <li>子タスク行のテーマ/課題列の右端にあるチェックボックスをON</li>
+    <li>直前の子タスクの納期が、この子の着手日の下限になる</li>
+    <li>タイムラインでは紫色の依存線で前後関係が見える</li>
+    <li>前のタスクの納期を後ろへ動かすと、連動してこの子も押し出される</li>
+  </ol>
+  <div class="tip">親行の <kbd>連携一括ON</kbd> / <kbd>OFF</kbd> ボタンで、テーマ内の全子タスクの連携をまとめて切り替えられます。</div>
+  <div class="warn">最初の子タスク（枝番010）は依存の対象外です。また、完了済みタスクの連携は変更できません。</div>
+</div>
+</div>
+
+<!-- A-16 -->
+<div class="section" id="a16">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> A-16 ヘルプ表示（？ボタン） <span class="badge">操作支援</span>
+</button>
+<div class="section-body">
+  <div class="when">画面上のボタンや項目の意味を確認したいとき。</div>
+  <ol class="steps">
+    <li>画面右上の <kbd>?</kbd> ボタンをクリック（ON/OFFトグル）</li>
+    <li>ONの状態で各ボタンや入力欄にマウスを乗せると、「名称：説明」形式のツールチップが出る</li>
+    <li>もう一度 <kbd>?</kbd> をクリックすると OFF</li>
+  </ol>
+  <div class="tip">ヘルプ表示はON/OFFの状態がブラウザに記憶されます。操作に慣れたらOFFにすると邪魔になりません。</div>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<div class="part-heading b" id="partB">Bパート：裏技事典</div>
+
+<!-- B-01 -->
+<div class="section b-card" id="b01">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-01 親の着手日入力で子タスクに日付が自動連番配置される <span class="badge">時短</span>
+</button>
+<div class="section-body">
+  <div class="when">親テーマと子タスクの<strong>両方の期間がすべて空</strong>の状態で、親に着手日を入力したとき。</div>
+  <ol class="steps">
+    <li>親テーマ・子タスクの着手日と納期がすべて空であることを確認</li>
+    <li>親の「着手」列に日付を入力する（例：6/10）</li>
+    <li>自動的に子タスクへ 6/10、6/11、6/12… と1日ずつずれた日付が入る</li>
+    <li>トースト「子タスクの着手日・納期を、親の着手日から1日ずつずらして設定しました」が表示される</li>
+  </ol>
+  <div class="tip">子タスクが5つなら 6/10〜6/14 が自動で入ります。後からタイムラインでバーを個別に調整してください。</div>
+  <div class="warn">親または子にすでに日付が入っている場合は<strong>発動しません</strong>。完全に空の状態でのみ動作します。</div>
+</div>
+</div>
+
+<!-- B-02 -->
+<div class="section b-card" id="b02">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-02 子タスクの並べ替え（▲▼）で依存が自動解除される <span class="badge">安全装置</span>
+</button>
+<div class="section-body">
+  <div class="when">子タスクの順序を ▲▼ で入れ替えたとき。</div>
+  <ol class="steps">
+    <li>子タスクの行左下にある <kbd>▲</kbd> / <kbd>▼</kbd> をクリック</li>
+    <li>隣の子タスクと順番が入れ替わってアニメーションが表示される</li>
+    <li><strong>入れ替わった2件の依存フラグ（fFlag）</strong>が自動でOFFになる</li>
+  </ol>
+  <div class="tip">並べ替えで前後関係が変わると、依存の「前のタスクの納期が後ろの着手日の下限」ルールが矛盾する可能性があるため、安全のため自動解除されます。</div>
+</div>
+</div>
+
+<!-- B-03 -->
+<div class="section b-card" id="b03">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-03 計画バーのドラッグで実績日付も追従する <span class="badge">連動</span>
+</button>
+<div class="section-body">
+  <div class="when">タイムラインで子タスクの計画バー（破線枠）をドラッグ移動したとき。</div>
+  <ol class="steps">
+    <li>タイムラインで子タスクのバーをドラッグして移動する</li>
+    <li>計画（着手日・納期）だけでなく、<strong>実績（pdcaActualStart / pdcaActualEnd）も同じ日数分ずれる</strong></li>
+  </ol>
+  <div class="tip">「実績だけを独立して動かしたい」場合は、<kbd>実績修正</kbd> ボタンをONにしてから操作してください（→ B-12 参照）。</div>
+</div>
+</div>
+
+<!-- B-04 -->
+<div class="section b-card" id="b04">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-04 外部CSVの担当者フィルタ切替 <span class="badge">複数人運用</span>
+</button>
+<div class="section-body">
+  <div class="when">複数人のCSVを取り込んで、担当者ごとに表示を切り替えたいとき。</div>
+  <ol class="steps">
+    <li>異なるOwnerIDのCSVを <kbd>CSV取込</kbd> で複数回読み込む</li>
+    <li>ヘッダーに「外部CSV表示フィルタ」のドロップダウンが出現する</li>
+    <li>「自分＋全外部」「外部のみ全担当」「特定の担当者のみ」を選択して切り替え</li>
+  </ol>
+  <div class="tip">外部CSVの担当者IDは行のタスクID欄に「（ID）******」形式で表示されます。</div>
+</div>
+</div>
+
+<!-- B-05 -->
+<div class="section b-card" id="b05">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-05 テーマ名・アプリ表題の直接編集 <span class="badge">インライン編集</span>
+</button>
+<div class="section-body">
+  <div class="when">テーマ名やアプリのタイトルを素早く変更したいとき。</div>
+  <ol class="steps">
+    <li><strong>テーマ名</strong>：リスト表示のテーマ名テキストを直接クリック → その場で編集 → フォーカスを外すと保存</li>
+    <li><strong>アプリ表題</strong>：ヘッダーのタイトル文字を直接クリック → 編集 → フォーカスを外すと保存</li>
+  </ol>
+  <div class="tip">アプリ表題を空にするとデフォルト名「Personal Business Project Manager」に戻ります。設定画面の「表題」欄でも変更できます。</div>
+  <div class="warn">完了・アーカイブ済み・外部CSVのテーマ名は編集できません（contenteditable が無効）。</div>
+</div>
+</div>
+
+<!-- B-06 -->
+<div class="section b-card" id="b06">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-06 子タスクの全完了/中止で親ステータスが自動変化 <span class="badge">自動判定</span>
+</button>
+<div class="section-body">
+  <div class="when">テーマ内の子タスクをすべて「完了」や「中止」にしたとき。</div>
+  <ol class="steps">
+    <li>テーマ内のすべての子タスクを「完了」にする</li>
+    <li>→ 親の進捗ボタンが自動で <strong>「完了」</strong> に変わる</li>
+    <li>最後の子が「中止」の場合 → 親も <strong>「中止」</strong> になる</li>
+    <li>一部の子を「未着手」「進行中」などに戻すと → 親は <strong>「進行中」</strong> に戻る</li>
+  </ol>
+  <div class="tip">判定基準は「枝番が最大の子タスクの状態」です。例えば子が5つあり、最後の子が「中止」なら親は「中止」になります。</div>
+</div>
+</div>
+
+<!-- B-07 -->
+<div class="section b-card" id="b07">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-07 ◇/★ が期間外になると警告が出る <span class="badge">整合性チェック</span>
+</button>
+<div class="section-body">
+  <div class="when">子タスクの◇（展開）や★（イベント）の日付が着手日〜納期の範囲外になったとき。</div>
+  <ol class="steps">
+    <li>子タスクに着手日=6/10、納期=6/20 を設定</li>
+    <li>◇の日付を 6/5（着手日より前）に入力しようとする</li>
+    <li>→ トースト「◇/★ はこの子タスクの期間内に設定してください」が表示され、<strong>入力が反映されない</strong></li>
+  </ol>
+  <div class="tip">すでにセット済みの◇/★がある状態で期間を狭めた場合は「◇が期間外です」と警告が出ます。自動で消えないので手動で修正してください。</div>
+</div>
+</div>
+
+<!-- B-08 -->
+<div class="section b-card" id="b08">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-08 テンプレート取込時の重複処理 <span class="badge">取込制御</span>
+</button>
+<div class="section-body">
+  <div class="when">テンプレートを読み込んだとき、すでに同じテーマ名が存在する場合。</div>
+  <ol class="steps">
+    <li>テンプレートを読み込むと、既存テーマと名前が一致するか自動チェック</li>
+    <li>一致した場合、ダイアログで3つの選択肢が表示される：</li>
+  </ol>
+  <div class="example">
+    <strong>1: 追加</strong> — 同名テーマがもう1セット作られる（別コード）<br>
+    <strong>2: 上書き</strong> — 既存の親子を削除してから新しく取り込む<br>
+    <strong>3: スキップ</strong> — このテーマは取り込まない
+  </div>
+  <div class="warn">上書きを選ぶと既存データが<strong>完全に消えます</strong>。CSV出力でバックアップを取ってから操作してください。</div>
+</div>
+</div>
+
+<!-- B-09 -->
+<div class="section b-card" id="b09">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-09 期間リセット <span class="badge">やり直し</span>
+</button>
+<div class="section-body">
+  <div class="when">テーマ内の日付をすべてクリアしてスケジュールを引き直したいとき。</div>
+  <ol class="steps">
+    <li>親テーマの行で <kbd>期間リセット</kbd> ボタンをクリック</li>
+    <li>確認ダイアログが表示される</li>
+    <li>OKを押すと、このテーマの親・子すべての着手日と納期がクリアされる</li>
+  </ol>
+  <div class="tip">完了済みやアーカイブ済みの子タスクはリセット対象外です。外部CSVもリセットされません。</div>
+  <div class="tip">リセット後に親の着手日を入れると、B-01 の自動連番が発動して子に1日ずつ入ります。</div>
+</div>
+</div>
+
+<!-- B-10 -->
+<div class="section b-card" id="b10">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-10 テーマ色の変更 <span class="badge">見た目</span>
+</button>
+<div class="section-body">
+  <div class="when">テーマごとに色を付けて視認性を上げたいとき。</div>
+  <ol class="steps">
+    <li>リスト表示で、親行の左端にある<strong>縦のカラーバー</strong>をクリック</li>
+    <li>10色のカラーパレットが表示される</li>
+    <li>好きな色をクリック → バーとタイムラインのバーに反映</li>
+    <li>「色を消す」で元のデフォルト色に戻る</li>
+  </ol>
+  <div class="tip">テーマ色はCSV出力にも保存されるため、取り込んでも復元されます。</div>
+</div>
+</div>
+
+<!-- B-11 -->
+<div class="section b-card" id="b11">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-11 進捗シグナルの意味（⚠️🚀✨） <span class="badge">自動表示</span>
+</button>
+<div class="section-body">
+  <div class="when">子タスクの横やタイムラインに記号が出たとき。</div>
+  <p style="margin:10px 0;">以下のアイコンは、<strong>期間と進捗状態を比較</strong>して自動的に表示されます。</p>
+  <table style="border-collapse:collapse;width:100%;margin:10px 0;">
+    <tr style="background:#f5f5f5;"><th style="padding:8px;border:1px solid #ddd;width:60px;">記号</th><th style="padding:8px;border:1px solid #ddd;">意味</th><th style="padding:8px;border:1px solid #ddd;">表示条件</th></tr>
+    <tr><td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:1.2rem;">⚠️</td><td style="padding:8px;border:1px solid #ddd;">遅れの可能性</td><td style="padding:8px;border:1px solid #ddd;">経過日数に対して進捗ステップが追いついていない</td></tr>
+    <tr><td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:1.2rem;">🚀</td><td style="padding:8px;border:1px solid #ddd;">先行している</td><td style="padding:8px;border:1px solid #ddd;">経過日数に対して進捗が14%以上先に進んでいる</td></tr>
+    <tr><td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:1.2rem;">✨</td><td style="padding:8px;border:1px solid #ddd;">期限内完了</td><td style="padding:8px;border:1px solid #ddd;">納期より前に完了が記録された</td></tr>
+    <tr><td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:1.2rem;">✕</td><td style="padding:8px;border:1px solid #ddd;">中止</td><td style="padding:8px;border:1px solid #ddd;">進捗が「中止」のタスク</td></tr>
+  </table>
+  <div class="tip">これらは自動計算のため手動で付け外しはできません。進捗を更新すれば変化します。</div>
+</div>
+</div>
+
+<!-- B-12 -->
+<div class="section b-card" id="b12">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-12 実績修正モード（PDCAの実績バー編集） <span class="badge">タイムライン限定</span>
+</button>
+<div class="section-body">
+  <div class="when">タイムラインで実績の期間だけを計画と独立して修正したいとき。</div>
+  <ol class="steps">
+    <li>タイムライン表示に切り替える</li>
+    <li><kbd>実績修正</kbd> ボタンをクリックしてONにする（ボタンがハイライト表示）</li>
+    <li>子タスクの<strong>実績バー（下段の実線）</strong>だけがドラッグ可能になる</li>
+    <li>バーをドラッグ → 実績の着手日と終了日が移動</li>
+    <li>右端のハンドルをドラッグ → 実績の終了日だけ伸縮</li>
+    <li>リスト表示に戻すと<strong>自動でOFFになる</strong></li>
+  </ol>
+  <div class="tip">実績修正モード中は計画の破線枠はそのまま残ります。「予定はこう、実際はこうだった」の比較がしやすい設計です。</div>
+  <div class="warn">まだ一度も進捗を「調査中」以上にしたことがない子タスク（未着手のまま）には実績バーが表示されません。</div>
+</div>
+</div>
+
+<!-- B-13 -->
+<div class="section b-card" id="b13">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-13 テーマ期間カレンダー <span class="badge">俯瞰</span>
+</button>
+<div class="section-body">
+  <div class="when">月間のテーマ重なりをカレンダー形式で確認したいとき。</div>
+  <ol class="steps">
+    <li>ヘッダー右側の<strong>今日の日付</strong>（例：「2026年6月11日(木)」）をクリック</li>
+    <li>テーマ期間カレンダーがモーダルで開く</li>
+    <li><kbd>◀</kbd> / <kbd>▶</kbd> で月を切り替え</li>
+    <li>各テーマの期間が週単位のバーで色分け表示される</li>
+  </ol>
+  <div class="tip">このカレンダーは<strong>閲覧専用</strong>です。タイムラインのように直接編集はできませんが、「この月はテーマが重なりすぎていないか」の確認に便利です。</div>
+</div>
+</div>
+
+<div class="manual-footer">
+  PBPM 操作手順書 ─ 作成日: 2026年6月 ─ 対応バージョン: v1.1.4
+</div>
+
+</main>
+</div>
+
+<script>
+function toggleSection(btn){
+  var body=btn.nextElementSibling;
+  var chev=btn.querySelector('.chevron');
+  if(body.classList.contains('show')){
+    body.classList.remove('show');
+    if(chev)chev.classList.remove('open');
+  }else{
+    body.classList.add('show');
+    if(chev)chev.classList.add('open');
+  }
+}
+(function(){
+  var links=document.querySelectorAll('.toc-link');
+  var sections=[];
+  links.forEach(function(a){
+    var id=a.getAttribute('href');
+    if(id&&id.startsWith('#')){
+      var el=document.getElementById(id.slice(1));
+      if(el)sections.push({link:a,el:el});
+    }
+  });
+  var current=null;
+  window.addEventListener('scroll',function(){
+    var y=window.scrollY+120;
+    var found=null;
+    for(var i=sections.length-1;i>=0;i--){
+      if(sections[i].el.offsetTop<=y){found=sections[i];break;}
+    }
+    if(found&&found!==current){
+      if(current)current.link.style.fontWeight='';
+      found.link.style.fontWeight='700';
+      current=found;
+    }
+  });
+})();
+</script>
+</body>
+</html>
