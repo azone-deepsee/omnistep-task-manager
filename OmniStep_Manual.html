@@ -10,24 +10,50 @@ html{scroll-behavior:smooth;font-size:15px;}
 body{font-family:"Hiragino Kaku Gothic ProN","Meiryo","Noto Sans JP",sans-serif;color:#1a1a1a;background:#f5f5f5;line-height:1.75;}
 a{color:#1565c0;text-decoration:none;}
 a:hover{text-decoration:underline;}
-.manual-header{background:linear-gradient(135deg,#1a237e 0%,#283593 100%);color:#fff;padding:28px 32px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.25);}
-.manual-header h1{font-size:1.5rem;font-weight:700;letter-spacing:.05em;}
-.manual-header .subtitle{font-size:.85rem;opacity:.85;margin-top:4px;}
+
+/* ===== Header（高さ固定で計算しやすくする） ===== */
+.manual-header{background:linear-gradient(135deg,#1a237e 0%,#283593 100%);color:#fff;padding:14px 32px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:space-between;gap:16px;height:64px;}
+.manual-header-left h1{font-size:1.35rem;font-weight:700;letter-spacing:.05em;line-height:1.2;}
+.manual-header-left .subtitle{font-size:.78rem;opacity:.85;margin-top:2px;}
+.manual-header-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.btn-close-manual{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:6px 18px;font-size:.85rem;cursor:pointer;transition:background .2s;}
+.btn-close-manual:hover{background:rgba(255,255,255,.3);}
+
+/* ===== Layout ===== */
 .layout{display:flex;max-width:1280px;margin:0 auto;gap:0;}
-.sidebar{width:280px;min-width:280px;background:#fff;border-right:1px solid #ddd;position:sticky;top:80px;height:calc(100vh - 80px);overflow-y:auto;padding:16px 0;font-size:.82rem;z-index:50;}
+
+/* ===== Sidebar ===== */
+.sidebar{
+  width:280px;min-width:280px;background:#fff;border-right:1px solid #ddd;
+  position:sticky;top:64px;height:calc(100vh - 64px);
+  overflow-y:auto;padding:16px 0;font-size:.82rem;z-index:50;
+  overscroll-behavior:contain; /* ★修正③ スクロール漏れ防止 */
+}
 .sidebar::-webkit-scrollbar{width:5px;}
 .sidebar::-webkit-scrollbar-thumb{background:#bbb;border-radius:3px;}
 .toc-part{padding:0 16px;margin-bottom:6px;}
 .toc-part-title{font-weight:700;font-size:.9rem;color:#1a237e;padding:8px 0 4px;border-bottom:2px solid #c5cae9;margin-bottom:4px;}
 .toc-part-title.part-b{color:#bf360c;border-color:#ffccbc;}
-.toc-link{display:block;padding:4px 8px;border-radius:4px;color:#333;transition:background .15s;}
+.toc-link{display:block;padding:5px 8px;border-radius:4px;color:#333;transition:background .15s,font-weight .1s;}
 .toc-link:hover{background:#e8eaf6;text-decoration:none;}
 .toc-link.toc-b:hover{background:#fbe9e7;}
+.toc-link.toc-active{font-weight:700;background:#e8eaf6;color:#1a237e;}
+.toc-link.toc-b.toc-active{background:#fbe9e7;color:#bf360c;}
+
+/* ===== Main ===== */
 .main{flex:1;min-width:0;padding:32px 40px 80px;}
+
+/* ★修正④ アンカー位置をヘッダー分ずらす */
+.section{scroll-margin-top:80px;}
+.part-heading{scroll-margin-top:80px;}
+
+/* ===== Part Heading ===== */
 .part-heading{font-size:1.35rem;font-weight:700;padding:14px 20px;border-radius:6px;margin:32px 0 20px;color:#fff;}
 .part-heading.a{background:linear-gradient(90deg,#1a237e,#3949ab);}
 .part-heading.b{background:linear-gradient(90deg,#bf360c,#e64a19);}
 .part-heading:first-child{margin-top:0;}
+
+/* ===== Section Card ===== */
 .section{background:#fff;border-radius:8px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden;border-left:4px solid #3949ab;}
 .section.b-card{border-left-color:#e64a19;}
 .section-toggle{width:100%;text-align:left;border:none;background:none;padding:14px 20px;cursor:pointer;font-size:1rem;font-weight:600;color:#222;display:flex;align-items:center;gap:10px;transition:background .15s;}
@@ -39,6 +65,8 @@ a:hover{text-decoration:underline;}
 .section-body{display:none;padding:0 20px 18px;animation:fadeIn .25s;}
 .section-body.show{display:block;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
+
+/* ===== Content Styles ===== */
 .when{background:#e3f2fd;border-left:3px solid #1565c0;padding:8px 14px;border-radius:0 4px 4px 0;margin:10px 0 14px;font-size:.88rem;color:#0d47a1;}
 .when::before{content:"▶ いつ使う？";font-weight:700;display:block;margin-bottom:2px;font-size:.78rem;}
 .steps{counter-reset:step;margin:0 0 12px;padding:0;}
@@ -55,13 +83,19 @@ a:hover{text-decoration:underline;}
 kbd{background:#eee;border:1px solid #ccc;border-radius:3px;padding:1px 5px;font-size:.82rem;font-family:inherit;}
 strong{color:#1a237e;}
 .section.b-card strong{color:#bf360c;}
+
+/* ===== Footer ===== */
 .manual-footer{text-align:center;padding:24px;font-size:.8rem;color:#888;border-top:1px solid #ddd;background:#fff;margin-top:40px;}
+
+/* ===== Responsive ===== */
 @media(max-width:860px){
   .sidebar{display:none;}
   .main{padding:20px 16px 60px;}
-  .manual-header{padding:16px;}
-  .manual-header h1{font-size:1.2rem;}
+  .manual-header{padding:14px 16px;}
+  .manual-header-left h1{font-size:1.1rem;}
 }
+
+/* ===== Print ===== */
 @media print{
   .sidebar{display:none;}
   .manual-header{position:relative;background:#1a237e !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
@@ -70,14 +104,21 @@ strong{color:#1a237e;}
   .layout{display:block;}
   .main{padding:10px;}
   body{font-size:12px;background:#fff;}
+  .btn-close-manual{display:none;}
 }
 </style>
 </head>
 <body>
 
+<!-- ★修正① ヘッダーに閉じるボタン追加 -->
 <header class="manual-header">
-  <h1>PBPM 操作手順書</h1>
-  <div class="subtitle">Personal Business Project Manager ─ 機能別リファレンスガイド</div>
+  <div class="manual-header-left">
+    <h1>PBPM 操作手順書</h1>
+    <div class="subtitle">Personal Business Project Manager ─ 機能別リファレンスガイド</div>
+  </div>
+  <div class="manual-header-right">
+    <button class="btn-close-manual" onclick="closeManual()" title="手順書を閉じてアプリに戻ります">✕ 閉じる</button>
+  </div>
 </header>
 
 <div class="layout">
@@ -643,6 +684,25 @@ strong{color:#1a237e;}
 </div>
 
 <script>
+/* ★修正① 閉じるボタン */
+function closeManual(){
+  /* window.open で開かれた場合は close() が効く。
+     直接アドレスバーで開いた場合はタブを閉じられないので履歴で戻す */
+  if(window.opener){
+    window.close();
+  }else{
+    if(window.history.length>1){
+      window.history.back();
+    }else{
+      window.close();
+    }
+  }
+}
+
+/* ★修正② 重複防止（手順書側で window.name を宣言） */
+window.name='pbpm_manual';
+
+/* アコーディオン開閉 */
 function toggleSection(btn){
   var body=btn.nextElementSibling;
   var chev=btn.querySelector('.chevron');
@@ -654,29 +714,96 @@ function toggleSection(btn){
     if(chev)chev.classList.add('open');
   }
 }
+
+/* ★修正③ サイドバーのスクロール漏れ防止（wheelイベント制御） */
 (function(){
+  var sb=document.getElementById('sidebar');
+  if(!sb)return;
+  sb.addEventListener('wheel',function(e){
+    var atTop=sb.scrollTop<=0;
+    var atBottom=sb.scrollTop+sb.clientHeight>=sb.scrollHeight-1;
+    /* 上端で上スクロール or 下端で下スクロール → ページ側に漏れないよう止める */
+    if((atTop&&e.deltaY<0)||(atBottom&&e.deltaY>0)){
+      e.preventDefault();
+    }
+  },{passive:false});
+})();
+
+/* ★修正④ TOCクリック位置補正＋スクロール追従ハイライト修正 */
+(function(){
+  var HEADER_H=64; /* stickyヘッダーの高さ(px) */
   var links=document.querySelectorAll('.toc-link');
-  var sections=[];
+  var entries=[];
+
   links.forEach(function(a){
     var id=a.getAttribute('href');
     if(id&&id.startsWith('#')){
       var el=document.getElementById(id.slice(1));
-      if(el)sections.push({link:a,el:el});
+      if(el)entries.push({link:a,el:el});
     }
   });
-  var current=null;
-  window.addEventListener('scroll',function(){
-    var y=window.scrollY+120;
+
+  /* TOCクリック：ブラウザデフォルトのアンカースクロールを止めてJS制御 */
+  links.forEach(function(a){
+    a.addEventListener('click',function(e){
+      e.preventDefault();
+      var id=a.getAttribute('href');
+      if(!id)return;
+      var target=document.getElementById(id.slice(1));
+      if(!target)return;
+      /* ヘッダー分をオフセットしてスクロール */
+      var y=target.getBoundingClientRect().top+window.scrollY-HEADER_H-16;
+      window.scrollTo({top:Math.max(0,y),behavior:'smooth'});
+      /* クリック直後に該当セクションを開く */
+      var toggle=target.querySelector('.section-toggle');
+      var body=target.querySelector('.section-body');
+      if(toggle&&body&&!body.classList.contains('show')){
+        body.classList.add('show');
+        var chev=toggle.querySelector('.chevron');
+        if(chev)chev.classList.add('open');
+      }
+      /* URLハッシュ更新 */
+      history.replaceState(null,'',id);
+    });
+  });
+
+  /* スクロール追従ハイライト（getBoundingClientRect で正確に判定） */
+  var currentLink=null;
+  function updateHighlight(){
     var found=null;
-    for(var i=sections.length-1;i>=0;i--){
-      if(sections[i].el.offsetTop<=y){found=sections[i];break;}
+    for(var i=entries.length-1;i>=0;i--){
+      var rect=entries[i].el.getBoundingClientRect();
+      if(rect.top<=HEADER_H+40){
+        found=entries[i];
+        break;
+      }
     }
-    if(found&&found!==current){
-      if(current)current.link.style.fontWeight='';
-      found.link.style.fontWeight='700';
-      current=found;
+    if(found&&found.link!==currentLink){
+      if(currentLink)currentLink.classList.remove('toc-active');
+      found.link.classList.add('toc-active');
+      currentLink=found.link;
+      /* サイドバー内でアクティブ項目が見えるようにスクロール */
+      var sb=document.getElementById('sidebar');
+      if(sb){
+        var lr=currentLink.getBoundingClientRect();
+        var sr=sb.getBoundingClientRect();
+        if(lr.top<sr.top+10||lr.bottom>sr.bottom-10){
+          currentLink.scrollIntoView({block:'nearest',behavior:'smooth'});
+        }
+      }
+    }
+  }
+  var ticking=false;
+  window.addEventListener('scroll',function(){
+    if(!ticking){
+      ticking=true;
+      requestAnimationFrame(function(){
+        updateHighlight();
+        ticking=false;
+      });
     }
   });
+  updateHighlight();
 })();
 </script>
 </body>
