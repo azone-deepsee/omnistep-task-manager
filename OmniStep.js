@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.1.4 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.1.4";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.2.0 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.2.0";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -104,6 +104,13 @@ function applyParentStatusFromChildrenForFamily(familyKey) {
  * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
  */
 const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.2.0",
+        content:
+            "【データ】年間日程マスターを日程2列化（開始・終了、単日／期間）＋休日フラグ。休日はタイムラインで日曜と同帯表示。CSVも終了日・休日列に対応。月見出し強調、遅れテーマの赤枠（一覧・タイムライン）、単日時の終了日欄グレーアウト。",
+        releasedAt: "2026-05-20",
+        modifier: "—",
+    },
     {
         ver: "1.1.4",
         content:
@@ -1379,6 +1386,98 @@ let collapsedMonths = [];
 
 
 let yearlyMaster = JSON.parse(localStorage.getItem('omnistep_master') || '[]');
+
+function normalizeYearlyMasterEntry(m) {
+    if (!m || typeof m !== "object") {
+        return { name: "", date: "", dateEnd: "", isHoliday: false };
+    }
+    return {
+        name: String(m.name || ""),
+        date: String(m.date || "").trim(),
+        dateEnd: String(m.dateEnd || "").trim(),
+        isHoliday: !!m.isHoliday,
+    };
+}
+
+function migrateYearlyMasterIfNeeded() {
+    let changed = false;
+    yearlyMaster = yearlyMaster.map((m) => {
+        const n = normalizeYearlyMasterEntry(m);
+        if (
+            m.name !== n.name ||
+            m.date !== n.date ||
+            m.dateEnd !== n.dateEnd ||
+            !!m.isHoliday !== n.isHoliday
+        ) {
+            changed = true;
+        }
+        return n;
+    });
+    if (changed) saveMaster();
+}
+
+/** 年間日程の休日行から ISO 日付セット（単日・期間） */
+function getMasterHolidayIsoSet() {
+    const set = new Set();
+    yearlyMaster.forEach((m) => {
+        if (!m.isHoliday) return;
+        const start = String(m.date || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return;
+        const endRaw = String(m.dateEnd || "").trim();
+        const end = /^\d{4}-\d{2}-\d{2}$/.test(endRaw) ? endRaw : start;
+        if (compareIsoDate(end, start) < 0) return;
+        let cur = start;
+        while (compareIsoDate(cur, end) <= 0) {
+            set.add(cur);
+            cur = addCalendarDaysIso(cur, 1);
+        }
+    });
+    return set;
+}
+
+function validateMasterDateRange(startIso, endIso) {
+    const s = String(startIso || "").trim();
+    const e = String(endIso || "").trim();
+    if (!e) return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || !/^\d{4}-\d{2}-\d{2}$/.test(e)) return true;
+    return compareIsoDate(e, s) >= 0;
+}
+
+function applyMasterDateEndEmptyStyle(startEl, endEl) {
+    if (!endEl) return;
+    const hasStart = !!(startEl && String(startEl.value || "").trim());
+    const hasEnd = !!String(endEl.value || "").trim();
+    endEl.classList.toggle("master-date-end-empty", hasStart && !hasEnd);
+}
+
+function syncMasterAddDateEndMin() {
+    const start = document.getElementById("masterDate");
+    const end = document.getElementById("masterDateEnd");
+    if (!start || !end) return;
+    if (start.value) end.min = start.value;
+    else end.removeAttribute("min");
+    if (end.value && start.value && compareIsoDate(end.value, start.value) < 0) {
+        end.value = start.value;
+    }
+    applyMasterDateEndEmptyStyle(start, end);
+}
+
+function syncMasterRowDateEndMin(rowIndex) {
+    const start = document.querySelector(`input[data-master-date-start="${rowIndex}"]`);
+    const end = document.querySelector(`input[data-master-date-end="${rowIndex}"]`);
+    if (!start || !end) return;
+    if (start.value) end.min = start.value;
+    else end.removeAttribute("min");
+    if (end.value && start.value && compareIsoDate(end.value, start.value) < 0) {
+        end.value = start.value;
+        updateMasterEntry(rowIndex, "dateEnd", end.value);
+    }
+    applyMasterDateEndEmptyStyle(start, end);
+}
+
+function syncMasterListDateEndStyles() {
+    yearlyMaster.forEach((_, i) => syncMasterRowDateEndMin(i));
+}
 let projectTitle = localStorage.getItem('pbpm_project_title') || 'Personal Business Project Manager';
 let ownerName = localStorage.getItem('pbpm_owner_name') || '';
 let ownerId = localStorage.getItem('pbpm_owner_id') || '';
@@ -1687,6 +1786,7 @@ window.onload = () => {
     const btnPdcaInit = document.getElementById('btnPdcaActualEdit');
     if (btnPdcaInit) btnPdcaInit.style.display = 'none';
     ensureDependencyFieldsIfNeeded();
+    migrateYearlyMasterIfNeeded();
     migrateTaskFieldsIfNeeded();
     migrateTaskCodesIfNeeded();
     ensureFamilyCategoriesSyncedIfNeeded();
@@ -2495,6 +2595,27 @@ function renderTabs() {
     tabsContainer.innerHTML = html;
 }
 
+/** 表示行から遅れタスクを含むテーマの上下境界（親上・最下子下）を算出 */
+function computeOverdueFamilyRowMarkers(displayRows, todayMidnight, collapsedFamilyKeys, searchFamilyKeys) {
+    const overdueFamilies = new Set();
+    const lastVisibleChildIdByFamily = new Map();
+    displayRows.forEach((task) => {
+        const isParent = isParentTask(task);
+        const familyKey = getTaskFamilyKey(task);
+        const isCollapsed = collapsedFamilyKeys.includes(familyKey);
+        const showDespiteCollapse = searchFamilyKeys && searchFamilyKeys.has(familyKey);
+        if (!isParent && isCollapsed && !showDespiteCollapse) return;
+        if (!isParent) {
+            lastVisibleChildIdByFamily.set(familyKey, task.id);
+            const deadlineDate = task.deadline ? new Date(task.deadline) : null;
+            if (!isTerminalTaskStatus(task.status) && deadlineDate && deadlineDate < todayMidnight) {
+                overdueFamilies.add(familyKey);
+            }
+        }
+    });
+    return { overdueFamilies, lastVisibleChildIdByFamily };
+}
+
 // --- メイン描画処理 ---
 function renderAll() {
     const tbody = document.getElementById('taskBody');
@@ -2535,6 +2656,13 @@ function renderAll() {
     // --- 1. renderAll関数の最初の方（filtered.forEach の直前あたり）に追加 ---
     const today = new Date();
     today.setHours(0, 0, 0, 0); // 時刻をリセットして日付のみで比較
+
+    const { overdueFamilies, lastVisibleChildIdByFamily } = computeOverdueFamilyRowMarkers(
+        displayRows,
+        today,
+        typeof collapsedThemes !== "undefined" ? collapsedThemes : [],
+        searchFamilyKeys
+    );
 
     displayRows.forEach(task => {
         // 2. 判定用の準備
@@ -2601,6 +2729,16 @@ function renderAll() {
         if (!isParent && familyKey === lastExpandedListTheme) row.classList.add("row-animate-in");
 
         if (isExpired) row.classList.add("expired"); // ★追加：期限切れクラス
+        if (isParent && overdueFamilies.has(familyKey)) {
+            row.classList.add("timeline-overdue-family-top");
+        }
+        if (
+            !isParent &&
+            overdueFamilies.has(familyKey) &&
+            String(lastVisibleChildIdByFamily.get(familyKey)) === String(task.id)
+        ) {
+            row.classList.add("timeline-overdue-family-bottom");
+        }
 
         row.style.backgroundColor = useGrayBackground ? "var(--app-row-alt)" : "var(--app-row-base)";
 
@@ -3057,13 +3195,14 @@ function renderTimeline() {
         const mLabel = document.createElement('div');
         mLabel.style.width = isCollapsed ? `30px` : `${daysInMonth * dayWidth}px`;
         mLabel.style.cursor = isForced ? 'not-allowed' : 'pointer';
-        mLabel.style.borderRight = '1px dashed #ccc';
+        mLabel.className = "timeline-month-header";
+        mLabel.classList.add(isCollapsed ? "timeline-month-header--collapsed" : "timeline-month-header--open");
+        mLabel.classList.add(i % 2 === 0 ? "timeline-month-header--stripe-a" : "timeline-month-header--stripe-b");
         mLabel.style.fontSize = '0.8rem';
         mLabel.style.fontWeight = 'bold';
         mLabel.style.height = '35px';
         mLabel.style.lineHeight = '35px';
         mLabel.style.paddingLeft = '5px';
-        mLabel.style.background = isCollapsed ? "var(--app-timeline-month-collapsed)" : "var(--app-timeline-month-open)";
 
         if (isCollapsed) {
             mLabel.style.paddingLeft = '0';
@@ -3093,7 +3232,8 @@ function renderTimeline() {
         monthHeaderArea.appendChild(mLabel);
     }
 
-    // 日曜列の横位置（月見出しの下の行だけに重ねる。折りたたみ月は日単位が無いため除外）
+    // 日曜・マスター休日の縦帯（月見出しの下の行だけに重ねる。折りたたみ月は日単位が無いため除外）
+    const masterHolidayIsoSet = getMasterHolidayIsoSet();
     const timelineSunRects = (() => {
         const rects = [];
         for (let mi = 0; mi < monthsCount; mi++) {
@@ -3102,7 +3242,8 @@ function renderTimeline() {
             const daysInMonth = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
             for (let d = 1; d <= daysInMonth; d++) {
                 const dt = new Date(mDate.getFullYear(), mDate.getMonth(), d);
-                if (dt.getDay() !== 0) continue;
+                const iso = dateToIsoLocal(dt);
+                if (dt.getDay() !== 0 && !masterHolidayIsoSet.has(iso)) continue;
                 rects.push({ left: getX(dt), width: dayWidth });
             }
         }
@@ -3156,6 +3297,14 @@ function renderTimeline() {
     let lastThemeRootTimeline = "";
     let useGreenBackgroundTimeline = false;
     let hasAnimateIn = false; // row-animate-in が付く場合だけ依存線を遅延描画
+
+    const { overdueFamilies: overdueFamiliesTl, lastVisibleChildIdByFamily } =
+        computeOverdueFamilyRowMarkers(
+            timelineTasks,
+            todayTl,
+            typeof collapsedThemesTimeline !== "undefined" ? collapsedThemesTimeline : [],
+            searchFamilyKeysTl
+        );
 
     timelineTasks.forEach(task => {
         const isParent = isParentTask(task);
@@ -3230,6 +3379,12 @@ function renderTimeline() {
         lCell.style.width = `${labelWidth}px`;
         lCell.style.minWidth = `${labelWidth}px`;
         if (isExpiredTl) lCell.classList.add('timeline-expired');
+        if (isParent && overdueFamiliesTl.has(familyKey)) {
+            lCell.classList.add("timeline-overdue-family-top");
+        }
+        if (!isParent && overdueFamiliesTl.has(familyKey) && lastVisibleChildIdByFamily.get(familyKey) === task.id) {
+            lCell.classList.add("timeline-overdue-family-bottom");
+        }
         //if (!isParent) lCell.classList.add('row-animate-in');
         if (isCompleted) lCell.style.color = '#888';
         lCell.setAttribute(
@@ -3248,6 +3403,12 @@ function renderTimeline() {
         rArea.style.width = `${gridTotalWidth}px`;
         rArea.style.backgroundColor = rowBgColor;
         if (isExpiredTl) rArea.classList.add('timeline-expired');
+        if (isParent && overdueFamiliesTl.has(familyKey)) {
+            rArea.classList.add("timeline-overdue-family-top");
+        }
+        if (!isParent && overdueFamiliesTl.has(familyKey) && lastVisibleChildIdByFamily.get(familyKey) === task.id) {
+            rArea.classList.add("timeline-overdue-family-bottom");
+        }
         //if (!isParent) rArea.classList.add('row-animate-in');
         // 初回ロード時、かつ親タスクでない場合のみ、両方にアニメーションクラスを付ける判定を shouldAnimate に変更 ---
         if (shouldAnimate) {
@@ -4084,7 +4245,9 @@ function saveMaster() { localStorage.setItem('omnistep_master', JSON.stringify(y
 
 function getMasterOptionsHTML(currentValue) {
     let options = `<option value="" ${!currentValue ? 'selected' : ''}>--未選択--</option>`;
-    const sorted = [...yearlyMaster].sort((a, b) => (a.date || "9999-12-31") > (b.date || "9999-12-31") ? 1 : -1);
+    const sorted = [...yearlyMaster]
+        .filter((m) => !m.isHoliday)
+        .sort((a, b) => ((a.date || "9999-12-31") > (b.date || "9999-12-31") ? 1 : -1));
     sorted.forEach(m => { options += `<option value="${m.name}" ${m.name === currentValue ? 'selected' : ''}>${m.name}</option>`; });
     return options;
 }
@@ -4625,6 +4788,7 @@ function openYearlyMaster() {
     if (modal) modal.style.display = 'flex';
     updateBodyScrollLock();
     renderMasterList();
+    syncMasterAddDateEndMin();
 }
 function closeYearlyMaster() {
     const modal = document.getElementById('yearlyMasterModal');
@@ -4634,32 +4798,59 @@ function closeYearlyMaster() {
 }
 // A: 新規追加
 function addMasterDay() {
-    const n = document.getElementById('masterName'); // HTMLのIDと一致
-    const d = document.getElementById('masterDate'); // HTMLのIDと一致
+    const n = document.getElementById("masterName");
+    const d = document.getElementById("masterDate");
+    const de = document.getElementById("masterDateEnd");
+    const hol = document.getElementById("masterHolidayAdd");
 
     if (!n || !n.value) {
         showToast("名称を入力してください");
         return;
     }
+    const dateEnd = de?.value || "";
+    if (dateEnd && d?.value && !validateMasterDateRange(d.value, dateEnd)) {
+        showToast("終了日は開始日以降にしてください");
+        return;
+    }
 
-    yearlyMaster.push({ name: n.value, date: d.value });
+    yearlyMaster.push({
+        name: n.value,
+        date: d?.value || "",
+        dateEnd,
+        isHoliday: !!(hol && hol.checked),
+    });
     saveMaster();
     renderMasterList();
 
-    // 入力欄を空にする
     n.value = "";
-    d.value = "";
+    if (d) d.value = "";
+    if (de) {
+        de.value = "";
+        de.removeAttribute("min");
+    }
+    if (hol) hol.checked = false;
     showToast("マスターを追加しました");
 }
 function renderMasterList() {
-    const tbody = document.getElementById('yearlyMasterBody'); if (!tbody) return;
-    tbody.innerHTML = yearlyMaster.map((m, i) => `
+    const tbody = document.getElementById("yearlyMasterBody");
+    if (!tbody) return;
+    tbody.innerHTML = yearlyMaster
+        .map(
+            (m, i) => `
      <tr>
+      <td class="master-col-holiday"><input type="checkbox"${m.isHoliday ? " checked" : ""} onchange="updateMasterEntry(${i}, 'isHoliday', this.checked)"${helpAttr("休日：ONでタイムラインに日曜と同じ帯を表示します")}></td>
       <td style="padding:5px;"><input type="text" value="${escapeHtmlAttr(m.name)}" oninput="updateMasterEntry(${i}, 'name', this.value)" style="width:95%;"${helpAttr("マスター名称：展開・イベントの候補として一覧に出る名前です")}></td>
-      <td style="padding:5px;"><span style="display:block;"${helpAttr("マスター日付：この名称を選んだときにタスクへ入る既定の日付です（クリックでカレンダー）")}><input type="date" value="${m.date || ""}" title="" onchange="updateMasterEntry(${i}, 'date', this.value)" style="width:95%;"></span></td>
+      <td style="padding:5px;"><span class="master-date-range"${helpAttr("マスター日程：左のみ＝単日。終了日も入れると期間。休日ONでタイムラインに反映")}>
+        <input type="date" value="${m.date || ""}" title="" data-master-date-start="${i}" onchange="updateMasterEntry(${i}, 'date', this.value); syncMasterRowDateEndMin(${i})" style="width:48%;">
+        <span class="master-date-sep">〜</span>
+        <input type="date" value="${m.dateEnd || ""}" title="" data-master-date-end="${i}" min="${m.date || ""}" class="${m.date && !m.dateEnd ? "master-date-end-empty" : ""}" onchange="updateMasterEntry(${i}, 'dateEnd', this.value); syncMasterRowDateEndMin(${i})" style="width:48%;"${helpAttr("終了日（任意）：空のままなら単日。期間にする場合は開始日以降を指定")}>
+      </span></td>
       <td style="text-align:center;"><span onclick="deleteMasterDay(${i})" style="cursor:pointer; color:#999;"${helpAttr("マスター削除：この行の年間イベントを削除します")}>🗑</span></td>
     </tr>
-`).join("");
+`
+        )
+        .join("");
+    syncMasterListDateEndStyles();
 }
 
 function deleteMasterDay(i) {
@@ -4687,21 +4878,37 @@ function deleteMasterDay(i) {
     showToast("マスターを削除しました");
 }
 function updateMasterEntry(i, f, v) {
+    if (i < 0 || i >= yearlyMaster.length) return;
     const oldName = yearlyMaster[i].name;
-    yearlyMaster[i][f] = v; saveMaster();
-    if (f === 'name') {
+    if (f === "dateEnd" || f === "date") {
+        const nextStart = f === "date" ? String(v || "").trim() : String(yearlyMaster[i].date || "").trim();
+        const nextEnd = f === "dateEnd" ? String(v || "").trim() : String(yearlyMaster[i].dateEnd || "").trim();
+        if (nextEnd && nextStart && !validateMasterDateRange(nextStart, nextEnd)) {
+            showToast("終了日は開始日以降にしてください");
+            renderMasterList();
+            return;
+        }
+    }
+    if (f === "isHoliday") yearlyMaster[i][f] = !!v;
+    else yearlyMaster[i][f] = v;
+    saveMaster();
+    if (f === "name") {
         tasks.forEach(t => {
             if (getFirstFlag(t) === oldName) setFirstFlag(t, v);
             if (getTargetName(t) === oldName) setTargetName(t, v);
         });
         save();
     }
-    if (f === 'date') {
+    if (f === "date") {
         tasks.forEach(t => {
             if (getFirstFlag(t) === yearlyMaster[i].name) t.msDate = v;
             if (getTargetName(t) === yearlyMaster[i].name) setTargetDate(t, v);
         });
         save();
+    }
+    if (f === "isHoliday" || f === "dateEnd" || (f === "date" && yearlyMaster[i].isHoliday)) {
+        const tv = document.getElementById("timelineView");
+        if (tv && tv.style.display !== "none") renderTimeline();
     }
 }
 // 日程のみクリア（項目名は残す）
@@ -4709,7 +4916,10 @@ function resetMasterDates() {
     if (!confirm("全てのマスター日程（日付のみ）を消去しますか？")) return;
 
     // マスター側の日付を空に
-    yearlyMaster.forEach(m => m.date = "");
+    yearlyMaster.forEach((m) => {
+        m.date = "";
+        m.dateEnd = "";
+    });
 
     // タスク側の連動している日付も空にする
     tasks.forEach(t => {
@@ -4748,13 +4958,22 @@ function importMasterCSV(event) {
             if (col.length >= 2) {
                 const name = col[0];
                 const date = col[1] || "";
+                const col2 = col[2] || "";
+                const col3 = col[3] || "";
+                const dateEnd = /^\d{4}-\d{2}-\d{2}$/.test(col2) ? col2 : "";
+                const isHoliday = /^(1|true|yes|休日|はい)$/i.test(dateEnd ? col3 : col2);
 
-                // 既存の名称があれば上書き、なければ新規追加
-                const exist = yearlyMaster.find(m => m.name === name);
+                const exist = yearlyMaster.find((m) => m.name === name);
+                const row = normalizeYearlyMasterEntry({
+                    name,
+                    date,
+                    dateEnd,
+                    isHoliday,
+                });
                 if (exist) {
-                    exist.date = date;
+                    Object.assign(exist, row);
                 } else {
-                    yearlyMaster.push({ name, date });
+                    yearlyMaster.push(row);
                 }
             }
         });
@@ -5588,11 +5807,10 @@ function exportMasterCSV() {
     }
 
     // CSVのヘッダー（Excelで開いても文字化けしないようBOMを付与）
-    let csvContent = "\uFEFF名称,日付\n";
+    let csvContent = "\uFEFF名称,日付,終了日,休日\n";
 
     yearlyMaster.forEach(item => {
-        // カンマが含まれている場合を考慮してダブルクォーテーションで囲む
-        const row = `"${item.name}","${item.date}"`;
+        const row = `"${item.name}","${item.date || ""}","${item.dateEnd || ""}","${item.isHoliday ? "1" : "0"}"`;
         csvContent += row + "\n";
     });
 

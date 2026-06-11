@@ -43,7 +43,10 @@
     --app-modal-border: #eeeeee;
     --app-input-bg: #ffffff;
     --app-timeline-month-collapsed: #eeeeee;
+    --app-timeline-month-collapsed-alt: #e4e4e4;
     --app-timeline-month-open: #ffffff;
+    --app-timeline-month-open-alt: #ececec;
+    --app-timeline-month-divider: #b8b8b8;
     --app-timeline-grid-line: #f0f0f0;
     /* タイムライン日曜帯（行エリアに重ねる。月見出し行には使わない） */
     --app-timeline-sunday-band: rgba(255, 190, 190, 0.14);
@@ -1041,6 +1044,69 @@ td { border: 1px solid var(--app-table-td-border); padding: 6px 8px; font-size: 
     z-index: 0;
 }
 
+/* タイムライン月見出し：交互色・区切り線 */
+.timeline-month-header--stripe-a.timeline-month-header--open {
+    background: var(--app-timeline-month-open);
+}
+.timeline-month-header--stripe-b.timeline-month-header--open {
+    background: var(--app-timeline-month-open-alt);
+}
+.timeline-month-header--stripe-a.timeline-month-header--collapsed {
+    background: var(--app-timeline-month-collapsed);
+}
+.timeline-month-header--stripe-b.timeline-month-header--collapsed {
+    background: var(--app-timeline-month-collapsed-alt);
+}
+.timeline-month-header {
+    border-right: 1px solid var(--app-timeline-month-divider) !important;
+    box-sizing: border-box;
+}
+
+/* 遅れタスクを含むテーマ：親上・最下子の下を赤太線（一覧・タイムライン共通） */
+tr.timeline-overdue-family-top > td,
+.sticky-label.timeline-overdue-family-top,
+.timeline-row-area.timeline-overdue-family-top {
+    border-top: 3px solid #d93025;
+    box-sizing: border-box;
+}
+tr.timeline-overdue-family-bottom > td,
+.sticky-label.timeline-overdue-family-bottom,
+.timeline-row-area.timeline-overdue-family-bottom {
+    border-bottom: 3px solid #d93025 !important;
+    box-sizing: border-box;
+}
+
+.master-table th.master-col-holiday,
+.master-table td.master-col-holiday {
+    width: 44px;
+    text-align: center;
+    vertical-align: middle;
+}
+.master-table .master-date-range {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.master-table .master-date-range input[type="date"],
+.master-add-panel input[type="date"] {
+    flex: 1;
+    min-width: 118px;
+}
+.master-table .master-date-range input[type="date"].master-date-end-empty,
+.master-add-panel input[type="date"].master-date-end-empty {
+    opacity: 0.55;
+    background: var(--app-surface-muted);
+    color: var(--app-text-muted);
+    border-color: var(--app-border-light);
+    cursor: pointer;
+}
+.master-date-sep {
+    color: var(--app-text-muted);
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
 /* タイムライン：土日・今日の着色 */
 /* ------------------------------------------------------------ */
 .sun { background-color: #ffebee; }
@@ -1864,7 +1930,7 @@ html[data-theme="dark"] .theme-name-child {
 
 /* 年間日程（マスター）モーダル：ヘッダー固定・中身スクロール */
 .master-modal-content {
-    width: 700px;
+    width: 860px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
@@ -2260,7 +2326,10 @@ html[data-theme="sepia"] {
     --app-modal-border: #dccfbf;
     --app-input-bg: #fffdf8;
     --app-timeline-month-collapsed: #e0d6c8;
+    --app-timeline-month-collapsed-alt: #d6cbbf;
     --app-timeline-month-open: #f7f1e8;
+    --app-timeline-month-open-alt: #ede5da;
+    --app-timeline-month-divider: #b8a898;
     --app-timeline-grid-line: #dccfbf;
     --app-month-bar-bg: #e8dfd4;
     --app-memo-modal-bg: #fff9e6;
@@ -2313,7 +2382,10 @@ html[data-theme="cool"] {
     --app-modal-border: #d0dbe8;
     --app-input-bg: #ffffff;
     --app-timeline-month-collapsed: #dce6f2;
+    --app-timeline-month-collapsed-alt: #cfd9e6;
     --app-timeline-month-open: #fafcff;
+    --app-timeline-month-open-alt: #eef4fb;
+    --app-timeline-month-divider: #9eb0c4;
     --app-timeline-grid-line: #d0dbe8;
     --app-month-bar-bg: #e4ecf4;
     --app-memo-modal-bg: #f8fbff;
@@ -2367,7 +2439,10 @@ html[data-theme="soft"] {
     --app-modal-border: #e4dfef;
     --app-input-bg: #ffffff;
     --app-timeline-month-collapsed: #e4dfef;
+    --app-timeline-month-collapsed-alt: #d9d3e6;
     --app-timeline-month-open: #faf8fc;
+    --app-timeline-month-open-alt: #f0ecf8;
+    --app-timeline-month-divider: #b4adc4;
     --app-timeline-grid-line: #e4dfef;
     --app-month-bar-bg: #e8e3f2;
     --app-memo-modal-bg: #fffaf7;
@@ -2421,7 +2496,10 @@ html[data-theme="dark"] {
     --app-modal-border: #3c4043;
     --app-input-bg: #1e1e22;
     --app-timeline-month-collapsed: #3c4043;
+    --app-timeline-month-collapsed-alt: #35383b;
     --app-timeline-month-open: #1e1e22;
+    --app-timeline-month-open-alt: #26262c;
+    --app-timeline-month-divider: #6a6e73;
     --app-timeline-grid-line: #3c4043;
     --app-timeline-sunday-band: rgba(220, 120, 120, 0.12);
     --app-timeline-sat-border: rgba(160, 160, 160, 0.55);

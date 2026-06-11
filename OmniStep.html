@@ -320,18 +320,27 @@
                 </div>
 
                 <div class="master-add-panel">
-                    <input type="text" id="masterName" placeholder="イベント名（例：棚卸、連休など）" style="flex:2;"
+                    <label class="master-col-holiday" style="display:flex;align-items:center;gap:4px;flex-shrink:0;"
+                        data-help="休日：ONにするとタイムラインで日曜と同じ帯表示になります（単日または期間）">
+                        <input type="checkbox" id="masterHolidayAdd">休日
+                    </label>
+                    <input type="text" id="masterName" placeholder="イベント名（例：棚卸、GWなど）" style="flex:2;"
                         data-help="追加する名称：一覧に並ぶイベント名です">
                     <input type="date" id="masterDate" style="flex:1;" title=""
-                        data-help="追加する日付：この名称を選んだときタスクに入る日付です（クリックでカレンダー）">
+                        data-help="日程（開始）：左のみ＝単日。終了日も入れると期間になります"
+                        onchange="syncMasterAddDateEndMin()">
+                    <input type="date" id="masterDateEnd" style="flex:1;" title=""
+                        data-help="日程（終了）：任意。開始日以降。空なら単日扱いです"
+                        onchange="syncMasterAddDateEndMin()" oninput="syncMasterAddDateEndMin()">
                     <button type="button" class="btn-add" onclick="addMasterDay()" style="padding: 6px 15px;"
-                        data-help="追加：名称と日付でマスターに1行追加します">追加</button>
+                        data-help="追加：名称と日程でマスターに1行追加します">追加</button>
                 </div>
 
                 <div class="master-list-panel">
                     <table class="master-table">
                         <thead>
                             <tr>
+                                <th class="master-col-holiday">休日</th>
                                 <th style="text-align: left;">名称</th>
                                 <th style="text-align: left;">日程</th>
                                 <th style="text-align: center; width: 60px;">削除</th>
