@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.2.1 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.2.1";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.2.2 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.2.2";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -104,6 +104,13 @@ function applyParentStatusFromChildrenForFamily(familyKey) {
  * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
  */
 const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.2.2",
+        content:
+            "設定の版履歴を ver ごとのアコーディオン表示に変更。モーダル内をスクロール可能にし、履歴が増えても一覧を確認しやすくした。",
+        releasedAt: "2026-07-06",
+        modifier: "—",
+    },
     {
         ver: "1.2.1",
         content:
@@ -1666,13 +1673,27 @@ function openVersionHistoryModal() {
     if (!modal || !body) return;
     const log = getVersionHistoryForDisplay();
     if (!log.length) {
-        body.innerHTML = "<p style=\"margin:0;color:var(--app-text-muted);\">版履歴はまだありません。</p>";
+        body.innerHTML = "<p class=\"version-history-empty\">版履歴はまだありません。</p>";
     } else {
-        let rows = "";
-        log.forEach((e) => {
-            rows += `<tr><td>${escapeHtml(e.ver || "")}</td><td>${escapeHtml(e.content || "")}</td><td>${escapeHtml(formatVersionHistoryDate(e.releasedAt))}</td><td>${escapeHtml(e.modifier || "—")}</td></tr>`;
-        });
-        body.innerHTML = `<table class="version-history-table"><colgroup><col class="version-history-col-ver"><col class="version-history-col-content"><col class="version-history-col-datetime"><col class="version-history-col-modifier"></colgroup><thead><tr><th>ver</th><th>内容</th><th>日付</th><th>修正者</th></tr></thead><tbody>${rows}</tbody></table>`;
+        const items = log.map((e, i) => {
+            const openAttr = i === 0 ? " open" : "";
+            const dateStr = formatVersionHistoryDate(e.releasedAt);
+            const modifier = e.modifier || "—";
+            const metaParts = [];
+            if (dateStr && dateStr !== "—") metaParts.push(dateStr);
+            if (modifier && modifier !== "—") metaParts.push(modifier);
+            const meta = metaParts.length ? metaParts.join(" · ") : "—";
+            return (
+                `<details class="version-history-item"${openAttr}>` +
+                `<summary class="version-history-summary">` +
+                `<span class="version-history-ver">${escapeHtml(e.ver || "")}</span>` +
+                `<span class="version-history-meta">${escapeHtml(meta)}</span>` +
+                `</summary>` +
+                `<div class="version-history-detail">${escapeHtml(e.content || "")}</div>` +
+                `</details>`
+            );
+        }).join("");
+        body.innerHTML = `<div class="version-history-accordion">${items}</div>`;
     }
     modal.style.display = "flex";
     modal.setAttribute("aria-hidden", "false");
