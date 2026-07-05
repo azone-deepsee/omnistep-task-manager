@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.2.0 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.2.0";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.2.1 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.2.1";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -104,6 +104,13 @@ function applyParentStatusFromChildrenForFamily(familyKey) {
  * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
  */
 const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.2.1",
+        content:
+            "【実績】「実績更新」ボタン追加（起動時・進捗変更時も自動）。調査中・進行中・修正中の子タスク実績終了を今日まで伸ばし、納期超過分は実績を赤表示。計画ドラッグは実績データ・表示とも独立（ドラッグ中も実績は固定）。",
+        releasedAt: "2026-05-20",
+        modifier: "—",
+    },
     {
         ver: "1.2.0",
         content:
@@ -912,8 +919,10 @@ function getTimelinePdcaExecEndIso(task, todayMidnight) {
     const t0 = new Date(todayMidnight.getTime());
     t0.setHours(0, 0, 0, 0);
     const todayIso = dateToIsoLocal(t0);
-    if (todayIso < task.startDate) return null;
-    return todayIso <= task.deadline ? todayIso : task.deadline;
+    const actStart = getPdcaActualStartForDisplay(task);
+    if (!actStart || compareIsoDate(todayIso, actStart) < 0) return null;
+    // 未完了：実績の終端は今日まで（納期超過分はタイムライン上で赤表示）
+    return todayIso;
 }
 
 function addCalendarDaysIso(iso, deltaDays) {
@@ -1016,6 +1025,79 @@ function ensurePdcaActualSeedFromComputed(task, todayMidnight) {
     task.pdcaActualStart = task.startDate;
     task.pdcaActualEnd = e;
     save();
+}
+
+/** 実績更新の対象か（子・着手済みの実行中系・自データ） */
+const ACTUAL_UPDATE_STATUSES = new Set(["調査中", "進行中", "修正中"]);
+
+function isTaskEligibleForAdvanceActualToToday(task) {
+    if (!task || isParentTask(task) || isExternalTask(task) || task.archived) return false;
+    if (!ACTUAL_UPDATE_STATUSES.has(task.status)) return false;
+    if (!task.startDate || !task.deadline) return false;
+    return true;
+}
+
+/** 1件の実績終了を今日まで進める。実績着手は既存値を維持（計画着手に追従しない） */
+function advanceTaskActualToToday(task, todayMidnight) {
+    const todayIso = dateToIsoLocal(todayMidnight);
+    const curStart = String(task.pdcaActualStart || "").trim();
+    const curEnd = String(task.pdcaActualEnd || "").trim();
+    const hasStart = /^\d{4}-\d{2}-\d{2}$/.test(curStart);
+    const hasEnd = /^\d{4}-\d{2}-\d{2}$/.test(curEnd);
+
+    const workStart = hasStart ? curStart : task.startDate;
+    if (!workStart || compareIsoDate(todayIso, workStart) < 0) return false;
+
+    const newEnd = todayIso;
+    if (compareIsoDate(newEnd, workStart) < 0) return false;
+
+    let changed = false;
+    if (!hasStart && task.startDate) {
+        task.pdcaActualStart = task.startDate;
+        changed = true;
+    }
+    if (!hasEnd || compareIsoDate(curEnd, newEnd) !== 0) {
+        task.pdcaActualEnd = newEnd;
+        changed = true;
+    }
+    return changed;
+}
+
+/**
+ * 進行中・修正中の子タスク実績を今日まで進めて save。
+ * @returns {number} 更新件数
+ */
+function advanceRunningTasksActualToToday(options = {}) {
+    const silent = !!options.silent;
+    const today0 = new Date();
+    today0.setHours(0, 0, 0, 0);
+    let n = 0;
+    tasks.forEach((task) => {
+        if (!isTaskEligibleForAdvanceActualToToday(task)) return;
+        if (advanceTaskActualToToday(task, today0)) n++;
+    });
+    if (n > 0) {
+        save();
+        if (!silent) {
+            showToast(`実績更新：${n} 件を今日（${dateToIsoLocal(today0)}）まで保存しました`);
+        }
+    } else if (!silent) {
+        showToast("実績更新：対象タスクはありませんでした");
+    }
+    return n;
+}
+
+function onAdvanceActualToTodayClick() {
+    const n = advanceRunningTasksActualToToday({ silent: false });
+    if (n > 0) renderAll();
+}
+
+/** 進捗変更後など、1件だけ実績を今日まで同期 */
+function maybeAdvanceActualForTask(task) {
+    if (!isTaskEligibleForAdvanceActualToToday(task)) return false;
+    const today0 = new Date();
+    today0.setHours(0, 0, 0, 0);
+    return advanceTaskActualToToday(task, today0);
 }
 
 function closeThemeColorPicker() {
@@ -1785,11 +1867,14 @@ window.onload = () => {
     if (rangeGroup) rangeGroup.style.display = 'none';
     const btnPdcaInit = document.getElementById('btnPdcaActualEdit');
     if (btnPdcaInit) btnPdcaInit.style.display = 'none';
+    const btnAdvInit = document.getElementById('btnAdvanceActualToday');
+    if (btnAdvInit) btnAdvInit.style.display = 'none';
     ensureDependencyFieldsIfNeeded();
     migrateYearlyMasterIfNeeded();
     migrateTaskFieldsIfNeeded();
     migrateTaskCodesIfNeeded();
     ensureFamilyCategoriesSyncedIfNeeded();
+    advanceRunningTasksActualToToday({ silent: true });
     displayToday();
     initThemeCalendarUi();
     updateTitleDisplay(); // タイトルを表示
@@ -2967,6 +3052,7 @@ function switchView(viewName) {
     const btnT = document.getElementById('btnTimeline');
     const rangeGroup = document.querySelector('.timeline-range-group');
     const btnPdca = document.getElementById('btnPdcaActualEdit');
+    const btnAdv = document.getElementById('btnAdvanceActualToday');
 
     if (viewName === 'list') {
         pdcaActualEditMode = false;
@@ -2975,6 +3061,7 @@ function switchView(viewName) {
         timeEl.style.display = 'none';
         if (rangeGroup) rangeGroup.style.display = 'none';
         if (btnPdca) btnPdca.style.display = 'none';
+        if (btnAdv) btnAdv.style.display = 'none';
         if (btnL) {
             btnL.classList.add('view-btn-active');
             btnL.classList.remove('view-btn-inactive');
@@ -2988,6 +3075,7 @@ function switchView(viewName) {
         timeEl.style.display = 'block';
         if (rangeGroup) rangeGroup.style.display = 'inline-flex';
         if (btnPdca) btnPdca.style.display = 'inline-flex';
+        if (btnAdv) btnAdv.style.display = 'inline-flex';
         hideThemeOverflowTooltip();
         if (btnT) {
             btnT.classList.add('view-btn-active');
@@ -3725,7 +3813,7 @@ function renderTimeline() {
             } else {
                 bar.setAttribute(
                     "data-help",
-                    "タイムライン・子バー：破線枠＝計画（着手〜納期の元幅）、下に重ねた実線＝実績。納期超過分は実績が薄赤。ドラッグで計画ごと移動、実績修正ONで実績のみ移動／伸縮"
+                    "タイムライン・子バー：破線枠＝計画（着手〜納期の元幅）、下に重ねた実線＝実績。納期超過分は実績が薄赤。ドラッグ＝計画のみ移動（実績は独立）、実績修正ONで実績のみ移動／伸縮"
                 );
             }
 
@@ -4009,14 +4097,11 @@ function startDrag(e, task, bar) {
 
     isDraggingNow = true;
     const startX = e.clientX;
-    const initialLeft = parseFloat(bar.style.left);
     const startBase = task.startDate || task.deadline || task.msDate;
     const endBase = task.deadline || task.startDate || task.msDate;
     const originalStart = startBase ? new Date(startBase) : new Date();
     const originalEnd = endBase ? new Date(endBase) : new Date(originalStart);
     const durationDays = Math.max(0, Math.round((originalEnd - originalStart) / (1000 * 60 * 60 * 24)));
-    const origPdcaS = task.pdcaActualStart ? String(task.pdcaActualStart) : null;
-    const origPdcaE = task.pdcaActualEnd ? String(task.pdcaActualEnd) : null;
     const familyKey = getTaskFamilyKey(task);
     const depPrevDeadline = getDependencyPrevDeadlineMin(task);
     const minStartDate = depPrevDeadline ? new Date(depPrevDeadline) : null;
@@ -4030,14 +4115,8 @@ function startDrag(e, task, bar) {
     const markerMaxDaysMoved =
         markers.min ? Math.round((markers.min - originalStart) / (1000 * 60 * 60 * 24)) : null;
 
-    // ドラッグ中の見た目
-    bar.style.transition = "none"; // 【思惑①】移動中はアニメを消してシームレスに
-    bar.style.zIndex = "1000";
-    bar.style.cursor = 'grabbing';
-
     const onMouseMove = (moveEvent) => {
         const deltaX = moveEvent.clientX - startX;
-        // 【思惑①】見た目上の位置をリアルタイムに更新
         let previewDays = Math.round(deltaX / 15);
         const lower = Math.max(
             minDaysMoved !== null ? minDaysMoved : -Infinity,
@@ -4045,19 +4124,16 @@ function startDrag(e, task, bar) {
         );
         const upper = markerMaxDaysMoved !== null ? markerMaxDaysMoved : Infinity;
         previewDays = Math.max(lower, Math.min(upper, previewDays));
-        bar.style.left = `${initialLeft + previewDays * 15}px`;
         const previewStart = new Date(originalStart);
         previewStart.setDate(originalStart.getDate() + previewDays);
         const previewEnd = new Date(previewStart);
         previewEnd.setDate(previewStart.getDate() + durationDays);
-        let previewStartStr = previewStart.toISOString().split('T')[0];
-        task.startDate = previewStartStr;
+        task.startDate = previewStart.toISOString().split('T')[0];
         task.deadline = previewEnd.toISOString().split('T')[0];
-        if (origPdcaS) task.pdcaActualStart = addCalendarDaysIso(origPdcaS, previewDays);
-        if (origPdcaE) task.pdcaActualEnd = addCalendarDaysIso(origPdcaE, previewDays);
         reflectTaskDatesInList(task);
         syncParentDates(familyKey);
         save();
+        scheduleRenderTimeline();
         showTimelineTooltip(task, moveEvent);
     };
 
@@ -4077,8 +4153,6 @@ function startDrag(e, task, bar) {
             newEnd.setDate(originalEnd.getDate() + daysMoved);
             task.startDate = newStart.toISOString().split('T')[0];
             task.deadline = newEnd.toISOString().split('T')[0];
-            if (origPdcaS) task.pdcaActualStart = addCalendarDaysIso(origPdcaS, daysMoved);
-            if (origPdcaE) task.pdcaActualEnd = addCalendarDaysIso(origPdcaE, daysMoved);
             pushNextDependentTasks(task);
             // 子を動かしたら親も更新
             syncParentDates(familyKey);
@@ -4407,6 +4481,7 @@ function cycleStatus(id) {
         task.status = statusList[(idx + 1) % statusList.length];
         task.progressUpdatedAt = dateToIsoLocal(new Date());
         applyParentStatusFromChildrenForFamily(getTaskFamilyKey(task));
+        maybeAdvanceActualForTask(task);
     }
     save();
     renderAll();

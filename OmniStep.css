@@ -551,7 +551,8 @@ tbody tr:hover,
     font-weight: 700;
 }
 
-.view-selector .timeline-pdca-edit-btn {
+.view-selector .timeline-pdca-edit-btn,
+.view-selector .timeline-advance-actual-btn {
     margin-left: 10px;
     align-self: center;
 }

@@ -15,4 +15,6 @@ npm-debug.log*
 
 # バックアップ .txt とローカル用 CSV（GitHub には含めない）
 *.txt
+!PBPM_現行仕様_企画書.txt
+!PBPM_今後の要望.txt
 制作工程.csv

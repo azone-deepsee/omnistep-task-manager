@@ -151,6 +151,9 @@
             <button type="button" id="btnPdcaActualEdit" class="btn-sub timeline-pdca-edit-btn" onclick="togglePdcaActualEditMode()"
                 style="display:none;" aria-pressed="false"
                 data-help="実績修正：ONのとき、子タスクの実績バーだけをドラッグで移動・右端で伸縮できます（計画の破線はそのまま）。リスト表示に戻すとOFFになります">実績修正</button>
+            <button type="button" id="btnAdvanceActualToday" class="btn-sub timeline-advance-actual-btn" onclick="onAdvanceActualToTodayClick()"
+                style="display:none;"
+                data-help="実績更新：調査中・進行中・修正中の子タスクの実績終了日を今日まで伸ばして保存します（納期超過分は実績が赤く表示されます）">実績更新</button>
         </div>
 
         <div id="listView">
@@ -163,6 +166,8 @@
                 <!--<button class="btn-sub btn-sort" onclick="sortTasks()">納期順ソート</button>-->
                 <button class="btn-add" type="button" onclick="openNewTaskModal()"
                     data-help="新規テーマ登録：親テーマと最初の子をまとめて登録するウィンドウを開きます">＋新規テーマ登録</button>
+                <button type="button" class="btn-sub" onclick="onAdvanceActualToTodayClick()"
+                    data-help="実績更新：調査中・進行中・修正中の子タスクの実績終了日を今日まで伸ばして保存します（納期超過分は実績が赤く表示されます）">実績更新</button>
                 <div class="action-buttons">
                     <span id="includeArchivedBulkWrap" class="include-archived-wrap" style="display:none;">
                         <label class="include-archived-label" data-help="履歴も含む：一括削除などの対象にアーカイブ済み行を含めます">
