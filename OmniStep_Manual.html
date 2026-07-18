@@ -147,7 +147,7 @@ strong{color:#1a237e;}
     <div class="toc-part-title part-b">Bパート：裏技事典</div>
     <a class="toc-link toc-b" href="#b01">B-01 親の着手日 → 子へ自動連番</a>
     <a class="toc-link toc-b" href="#b02">B-02 子の並べ替えで依存自動解除</a>
-    <a class="toc-link toc-b" href="#b03">B-03 バー移動で実績も追従</a>
+    <a class="toc-link toc-b" href="#b03">B-03 計画ドラッグと実績は独立</a>
     <a class="toc-link toc-b" href="#b04">B-04 外部CSV担当者フィルタ</a>
     <a class="toc-link toc-b" href="#b05">B-05 テーマ名・表題の直接編集</a>
     <a class="toc-link toc-b" href="#b06">B-06 子の全完了で親ステータス自動変化</a>
@@ -158,6 +158,8 @@ strong{color:#1a237e;}
     <a class="toc-link toc-b" href="#b11">B-11 進捗シグナル ⚠🚀✨</a>
     <a class="toc-link toc-b" href="#b12">B-12 実績修正モード（PDCA）</a>
     <a class="toc-link toc-b" href="#b13">B-13 テーマ期間カレンダー</a>
+    <a class="toc-link toc-b" href="#b14">B-14 実績更新ボタン</a>
+    <a class="toc-link toc-b" href="#b15">B-15 版履歴（設定）</a>
   </div>
 </nav>
 
@@ -232,7 +234,7 @@ strong{color:#1a237e;}
     <li>タイムラインでもバーをドラッグして期間を移動できる（子タスクのみ）</li>
     <li>バー右端のハンドルをドラッグすると納期だけ伸縮する</li>
   </ol>
-  <div class="tip">着手日を入れると、納期が空なら同じ日に自動設定されます。納期を着手日より前にはできません。</div>
+  <div class="tip">着手日を入れると、納期が空なら同じ日に自動設定されます。納期を着手日より前にはできません。タイムラインのドラッグは<strong>計画のみ</strong>動き、実績は独立です（→ B-03）。</div>
   <div class="warn">期限を過ぎると行が赤くなります（期限切れ表示）。進捗を「完了」にすれば解除されます。</div>
 </div>
 </div>
@@ -246,11 +248,13 @@ strong{color:#1a237e;}
   <div class="when">棚卸・連休・発表会など全テーマ共通の基準日を管理するとき。</div>
   <ol class="steps">
     <li>ヘッダーの <kbd>📅 年間日程</kbd> ボタンをクリック</li>
-    <li>「イベント名」と「日付」を入力して <kbd>追加</kbd></li>
-    <li>追加した項目は一覧に表示され、インラインで名称・日付を編集可能</li>
+    <li>「名称」「開始日」「終了日」（任意）を入力。単日なら終了日は空のままでよい（終了日欄はグレー表示）</li>
+    <li>休日にしたい期間は <strong>休日</strong> にチェックを入れる</li>
+    <li><kbd>追加</kbd> する。一覧では名称・日付・休日をインライン編集できる</li>
     <li>タスクの「展開（◇）」や「イベント（☆）」のドロップダウンにマスターの候補が表示される</li>
   </ol>
   <div class="tip">マスターの日付を変更すると、タスク側で同じ名称を選択している◇/★の日付も連動して変わります。</div>
+  <div class="tip">休日フラグ付きの日程は、タイムライン上で<strong>日曜と同じ帯</strong>として表示されます（連休の可視化に便利）。</div>
   <div class="example">例：「棚卸」=9/30 を登録 → テーマAの☆に「棚卸」を選択 → 自動的に9/30が入る。後で「棚卸」を10/3に変更 → テーマAの☆も10/3に連動。</div>
 </div>
 </div>
@@ -266,10 +270,12 @@ strong{color:#1a237e;}
     <li>ビュー切替の <kbd>📅 タイムライン</kbd> ボタンをクリック</li>
     <li>左側にテーマ・子タスクの名前、右側に期間バーが表示される</li>
     <li>表示範囲を <kbd>3か月</kbd>〜<kbd>12か月</kbd> で切り替え</li>
-    <li>月ヘッダーの <kbd>＋</kbd>/<kbd>−</kbd> で月ごとに折りたたみ可能</li>
-    <li>バーの上にホバーするとツールチップ（着手日〜納期・日数）が表示される</li>
+    <li>月ヘッダーの <kbd>＋</kbd>/<kbd>−</kbd> で月ごとに折りたたみ可能（月見出しは交互色で区切りが分かりやすい）</li>
+    <li>子バーは<strong>破線枠＝計画</strong>、<strong>下段の実線＝実績</strong>（PDCA重ね表示）</li>
+    <li>バーの上にホバーするとツールチップが表示される</li>
   </ol>
-  <div class="tip">赤い縦線が「今日」。日曜は薄い帯、土曜は点線で区別されます。親バーは子の集約表示で、直接ドラッグしません。</div>
+  <div class="tip">赤い縦線が「今日」。日曜・休日マスターは薄い帯、土曜は点線で区別されます。親バーは子の集約表示で、直接ドラッグしません。</div>
+  <div class="tip">納期遅れのテーマは、一覧・タイムラインで親上端〜最下子下端に<strong>赤い太枠</strong>が付きます。</div>
   <div class="warn">タイムラインで子バーをドラッグすると<strong>即座にデータが変更・保存</strong>されます。元に戻す機能はないため注意してください。</div>
 </div>
 </div>
@@ -282,11 +288,15 @@ strong{color:#1a237e;}
 <div class="section-body">
   <div class="when">作業の進行状況を記録・更新するとき。</div>
   <ol class="steps">
-    <li>子タスクの「進捗」列のボタンをクリック</li>
-    <li>クリックごとに <strong>未着手 → 調査中 → 進行中 → 修正中 → 完了</strong> の順に切り替わる</li>
-    <li>親タスクのボタンは <strong>進行中 ⇔ 修正中</strong> のみ切り替え</li>
+    <li>「進捗」列は<strong>表示のみ</strong>。左右の <kbd>◀</kbd> / <kbd>▶</kbd> で前後に切り替える</li>
+    <li>子タスクの順： <strong>未着手 → 調査中 → 進行中 → 修正中 → 完了</strong></li>
+    <li>親タスクは <strong>進行中 ⇔ 修正中</strong>（未着手などからは ▶ で進行中へ）</li>
+    <li><strong>未着手</strong>では ◀ が無効、<strong>完了</strong>では ▶ が無効、<strong>中止</strong>では両方無効</li>
+    <li>調査中から未着手へ戻す、または完了から戻すときは「○○の実績を差し戻しますか？」の確認が出る。OKなら実績データも削除される</li>
   </ol>
+  <div class="tip">初めて調査中以上に進めた日が<strong>実績の開始日</strong>になります（計画の着手日ではありません）。完了時は「実績開始〜完了日」が実績期間です。1日で未着手→完了ならその1日だけです。</div>
   <div class="tip">親行に表示される「(2/5) 40%」は、子タスクの完了数と進捗率を自動計算した結果です。</div>
+  <div class="warn">中止は操作列の ⛔ から行います。中止中は進捗の ◀▶ は使えません。</div>
 </div>
 </div>
 
@@ -489,15 +499,16 @@ strong{color:#1a237e;}
 <!-- B-03 -->
 <div class="section b-card" id="b03">
 <button class="section-toggle" onclick="toggleSection(this)">
-  <span class="chevron">▶</span> B-03 計画バーのドラッグで実績日付も追従する <span class="badge">連動</span>
+  <span class="chevron">▶</span> B-03 計画バーのドラッグと実績は独立 <span class="badge">独立性</span>
 </button>
 <div class="section-body">
-  <div class="when">タイムラインで子タスクの計画バー（破線枠）をドラッグ移動したとき。</div>
+  <div class="when">タイムラインで子タスクの計画（破線枠）だけを動かしたいとき。</div>
   <ol class="steps">
-    <li>タイムラインで子タスクのバーをドラッグして移動する</li>
-    <li>計画（着手日・納期）だけでなく、<strong>実績（pdcaActualStart / pdcaActualEnd）も同じ日数分ずれる</strong></li>
+    <li>タイムラインで子タスクのバーをドラッグして移動する（実績修正OFF時）</li>
+    <li>変わるのは<strong>計画（着手日・納期）だけ</strong></li>
+    <li>実績（実績着手・実績納期）は<strong>動かない</strong>（ドラッグ中の見た目も固定）</li>
   </ol>
-  <div class="tip">「実績だけを独立して動かしたい」場合は、<kbd>実績修正</kbd> ボタンをONにしてから操作してください（→ B-12 参照）。</div>
+  <div class="tip">実績だけを動かしたい場合は <kbd>実績修正</kbd> をONにしてください（→ B-12）。終了日を今日までまとめて伸ばすなら <kbd>実績更新</kbd>（→ B-14）も使えます。</div>
 </div>
 </div>
 
@@ -542,7 +553,7 @@ strong{color:#1a237e;}
   <div class="when">テーマ内の子タスクをすべて「完了」や「中止」にしたとき。</div>
   <ol class="steps">
     <li>テーマ内のすべての子タスクを「完了」にする</li>
-    <li>→ 親の進捗ボタンが自動で <strong>「完了」</strong> に変わる</li>
+    <li>→ 親の進捗表示が自動で <strong>「完了」</strong> に変わる</li>
     <li>最後の子が「中止」の場合 → 親も <strong>「中止」</strong> になる</li>
     <li>一部の子を「未着手」「進行中」などに戻すと → 親は <strong>「進行中」</strong> に戻る</li>
   </ol>
@@ -654,8 +665,9 @@ strong{color:#1a237e;}
     <li>右端のハンドルをドラッグ → 実績の終了日だけ伸縮</li>
     <li>リスト表示に戻すと<strong>自動でOFFになる</strong></li>
   </ol>
-  <div class="tip">実績修正モード中は計画の破線枠はそのまま残ります。「予定はこう、実際はこうだった」の比較がしやすい設計です。</div>
-  <div class="warn">まだ一度も進捗を「調査中」以上にしたことがない子タスク（未着手のまま）には実績バーが表示されません。</div>
+  <div class="tip">実績修正OFF時は計画の破線枠だけが動きます。ON時は実績だけが動きます。「予定はこう、実際はこうだった」の比較用です。</div>
+  <div class="tip">納期を過ぎた実績部分は、タイムライン上で<strong>薄赤</strong>で表示されます。</div>
+  <div class="warn">未着手の子タスクには実績バーは出ません。◀▶で調査中以上に進めると、その日を起点に実績が付きます。</div>
 </div>
 </div>
 
@@ -667,7 +679,7 @@ strong{color:#1a237e;}
 <div class="section-body">
   <div class="when">月間のテーマ重なりをカレンダー形式で確認したいとき。</div>
   <ol class="steps">
-    <li>ヘッダー右側の<strong>今日の日付</strong>（例：「2026年6月11日(木)」）をクリック</li>
+    <li>ヘッダー右側の<strong>今日の日付</strong>（例：「2026年7月18日(土)」）をクリック</li>
     <li>テーマ期間カレンダーがモーダルで開く</li>
     <li><kbd>◀</kbd> / <kbd>▶</kbd> で月を切り替え</li>
     <li>各テーマの期間が週単位のバーで色分け表示される</li>
@@ -676,8 +688,43 @@ strong{color:#1a237e;}
 </div>
 </div>
 
+<!-- B-14 -->
+<div class="section b-card" id="b14">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-14 実績更新ボタン <span class="badge">一括</span>
+</button>
+<div class="section-body">
+  <div class="when">調査中・進行中・修正中の子タスクの実績終了日を、まとめて今日まで進めたいとき。</div>
+  <ol class="steps">
+    <li>リスト表示またはタイムライン表示で <kbd>実績更新</kbd> をクリック</li>
+    <li>対象ステータスの子タスクについて、実績終了日が今日まで更新・保存される</li>
+    <li>すでに実績着手がある場合は<strong>着手日はそのまま</strong>、終了だけ今日へ</li>
+    <li>実績がまだ無い場合は<strong>今日単日</strong>でシードされる（計画着手日には寄せない）</li>
+  </ol>
+  <div class="tip">アプリ起動時にも同じ処理が静かに走ります。進捗を調査中以上へ進めたときも、そのタスクだけ実績が今日に同期されます。</div>
+  <div class="warn">完了・中止・未着手・外部CSV行は対象外です。</div>
+</div>
+</div>
+
+<!-- B-15 -->
+<div class="section b-card" id="b15">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-15 版履歴（設定） <span class="badge">参照</span>
+</button>
+<div class="section-body">
+  <div class="when">アプリのバージョンと変更内容を確認したいとき。</div>
+  <ol class="steps">
+    <li>画面右上の <kbd>⚙</kbd>（設定）を開く</li>
+    <li>「PBPM バージョン x.x.x」のリンクをクリック</li>
+    <li>版履歴モーダルが開く。各 ver は<strong>アコーディオン</strong>（クリックで開閉）</li>
+    <li>最新版だけ最初から開いており、一覧はモーダル内でスクロールできる</li>
+  </ol>
+  <div class="tip">版履歴はアプリ内蔵データです。localStorage には依存しません。</div>
+</div>
+</div>
+
 <div class="manual-footer">
-  PBPM 操作手順書 ─ 作成日: 2026年6月 ─ 対応バージョン: v1.1.4
+  PBPM 操作手順書 ─ 更新日: 2026年7月 ─ 対応バージョン: v1.3.0
 </div>
 
 </main>

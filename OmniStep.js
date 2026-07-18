@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.2.2 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.2.2";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.3.0 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.3.0";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -104,6 +104,13 @@ function applyParentStatusFromChildrenForFamily(familyKey) {
  * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
  */
 const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.3.0",
+        content:
+            "進捗を◀▶ステッパー化（表示のみ＋前後操作）。未着手へ戻す／完了から戻すときに実績差し戻し確認とデータ削除。実績は計画と独立（初回シードは今日、完了は実績着手〜完了日）。操作手順書を1.2.x〜1.3.0内容に更新。",
+        releasedAt: "2026-07-18",
+        modifier: "—",
+    },
     {
         ver: "1.2.2",
         content:
@@ -913,21 +920,19 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** タイムラインPDCA：実行区間の終了日（子のみ）。未着手は null */
+/** タイムラインPDCA：実行区間の終了日（子のみ）。未着手は null。計画納期へのフォールバックはしない */
 function getTimelinePdcaExecEndIso(task, todayMidnight) {
     if (!task || isParentTask(task)) return null;
-    if (!task.startDate || !task.deadline) return null;
     if (task.status === "未着手") return null;
     if (isTerminalTaskStatus(task.status)) {
         const d = String(task.progressUpdatedAt || "").trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d >= task.startDate && d <= task.deadline) return d;
-        return task.deadline;
+        return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
     }
     const t0 = new Date(todayMidnight.getTime());
     t0.setHours(0, 0, 0, 0);
     const todayIso = dateToIsoLocal(t0);
-    const actStart = getPdcaActualStartForDisplay(task);
-    if (!actStart || compareIsoDate(todayIso, actStart) < 0) return null;
+    const actStart = String(task.pdcaActualStart || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(actStart) && compareIsoDate(todayIso, actStart) < 0) return null;
     // 未完了：実績の終端は今日まで（納期超過分はタイムライン上で赤表示）
     return todayIso;
 }
@@ -952,15 +957,20 @@ function minIsoDate(a, b) {
     return compareIsoDate(a, b) <= 0 ? a : b;
 }
 
-/** 表示用：実績の着手（未設定時は計画着手） */
+/** 表示用：実績の着手（保存値のみ。未設定時に計画着手へフォールバックしない） */
 function getPdcaActualStartForDisplay(task) {
     if (!task || isParentTask(task) || task.status === "未着手") return null;
     const c = String(task.pdcaActualStart || "").trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(c)) return c;
-    return task.startDate || null;
+    // 旧データ互換：完了系で実績未保存なら進捗更新日を単日実績として扱う
+    if (isTerminalTaskStatus(task.status)) {
+        const d = String(task.progressUpdatedAt || "").trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    }
+    return null;
 }
 
-/** 表示用：実績の終了（未設定時は従来ロジック） */
+/** 表示用：実績の終了（保存値優先。未設定時は進捗ロジック／今日） */
 function getPdcaActualEndForDisplay(task, todayMidnight) {
     if (!task || isParentTask(task) || task.status === "未着手") return null;
     const c = String(task.pdcaActualEnd || "").trim();
@@ -1026,11 +1036,18 @@ function togglePdcaActualEditMode() {
 
 function ensurePdcaActualSeedFromComputed(task, todayMidnight) {
     if (task.pdcaActualStart || task.pdcaActualEnd) return;
-    if (task.status === "未着手" || !task.startDate) return;
-    const e = getTimelinePdcaExecEndIso(task, todayMidnight);
-    if (!e) return;
-    task.pdcaActualStart = task.startDate;
-    task.pdcaActualEnd = e;
+    if (task.status === "未着手" || task.status === "中止") return;
+    const todayIso = dateToIsoLocal(todayMidnight);
+    if (isTerminalTaskStatus(task.status)) {
+        const d = String(task.progressUpdatedAt || "").trim();
+        const day = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : todayIso;
+        task.pdcaActualStart = day;
+        task.pdcaActualEnd = day;
+    } else {
+        // 初回シードは計画着手ではなく「今日」（実績開始日）
+        task.pdcaActualStart = todayIso;
+        task.pdcaActualEnd = todayIso;
+    }
     save();
 }
 
@@ -1040,11 +1057,13 @@ const ACTUAL_UPDATE_STATUSES = new Set(["調査中", "進行中", "修正中"]);
 function isTaskEligibleForAdvanceActualToToday(task) {
     if (!task || isParentTask(task) || isExternalTask(task) || task.archived) return false;
     if (!ACTUAL_UPDATE_STATUSES.has(task.status)) return false;
-    if (!task.startDate || !task.deadline) return false;
     return true;
 }
 
-/** 1件の実績終了を今日まで進める。実績着手は既存値を維持（計画着手に追従しない） */
+/**
+ * 1件の実績を今日まで進める。
+ * 未設定時は今日単日でシード（計画着手に追従しない）。既存着手は維持し終端のみ更新。
+ */
 function advanceTaskActualToToday(task, todayMidnight) {
     const todayIso = dateToIsoLocal(todayMidnight);
     const curStart = String(task.pdcaActualStart || "").trim();
@@ -1052,22 +1071,69 @@ function advanceTaskActualToToday(task, todayMidnight) {
     const hasStart = /^\d{4}-\d{2}-\d{2}$/.test(curStart);
     const hasEnd = /^\d{4}-\d{2}-\d{2}$/.test(curEnd);
 
-    const workStart = hasStart ? curStart : task.startDate;
-    if (!workStart || compareIsoDate(todayIso, workStart) < 0) return false;
-
-    const newEnd = todayIso;
-    if (compareIsoDate(newEnd, workStart) < 0) return false;
+    if (!hasStart) {
+        task.pdcaActualStart = todayIso;
+        task.pdcaActualEnd = todayIso;
+        return true;
+    }
+    if (compareIsoDate(todayIso, curStart) < 0) return false;
 
     let changed = false;
-    if (!hasStart && task.startDate) {
-        task.pdcaActualStart = task.startDate;
-        changed = true;
-    }
-    if (!hasEnd || compareIsoDate(curEnd, newEnd) !== 0) {
-        task.pdcaActualEnd = newEnd;
+    if (!hasEnd || compareIsoDate(curEnd, todayIso) !== 0) {
+        task.pdcaActualEnd = todayIso;
         changed = true;
     }
     return changed;
+}
+
+/** 完了時：着手済みなら終端を今日に、未設定なら今日単日 */
+function finalizeActualOnComplete(task) {
+    if (!task || isParentTask(task)) return;
+    const todayIso = dateToIsoLocal(new Date());
+    const curStart = String(task.pdcaActualStart || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(curStart)) {
+        task.pdcaActualStart = todayIso;
+        task.pdcaActualEnd = todayIso;
+        return;
+    }
+    task.pdcaActualEnd = compareIsoDate(todayIso, curStart) < 0 ? curStart : todayIso;
+}
+
+function clearPdcaActualData(task) {
+    if (!task) return;
+    delete task.pdcaActualStart;
+    delete task.pdcaActualEnd;
+}
+
+function getTaskProgressLabel(task) {
+    if (!task) return "（無名タスク）";
+    if (isParentTask(task)) {
+        const n = String(getPrimaryStep(task) || "").trim();
+        return n || "（無名テーマ）";
+    }
+    const n = String(getSecondaryStep(task) || getPrimaryStep(task) || "").trim();
+    return n || "（無名タスク）";
+}
+
+function confirmActualRollback(task) {
+    return confirm(`「${getTaskProgressLabel(task)}」の実績を差し戻しますか？`);
+}
+
+function canStepStatusBack(task) {
+    if (!task || task.archived || isExternalTask(task)) return false;
+    if (task.status === "中止") return false;
+    if (isParentTask(task)) return task.status === "修正中";
+    return task.status !== "未着手" && statusList.includes(task.status);
+}
+
+function canStepStatusForward(task) {
+    if (!task || task.archived || isExternalTask(task)) return false;
+    if (task.status === "中止") return false;
+    if (isParentTask(task)) {
+        if (task.status === "完了") return false;
+        return task.status !== "修正中";
+    }
+    return task.status !== "完了" && statusList.includes(task.status);
 }
 
 /**
@@ -3019,10 +3085,18 @@ function renderAll() {
         </td>`;
 
         const statusHelp = isParent
-            ? "進捗：親タスクは「進行中」と「修正中」だけを切り替えます（未着手などからは一度「進行中」に入ります）"
-            : "進捗：クリックのたびに 未着手→調査中→進行中→修正中→完了 の順で切り替わります";
+            ? "進捗：◀▶で「進行中」と「修正中」を切り替えます（未着手などからは▶で進行中へ）"
+            : "進捗：◀▶で 未着手→調査中→進行中→修正中→完了 を前後に切り替えます。未着手へ戻す／完了から戻すときは実績差し戻しの確認があります";
+        const canBack = !isArchived && !isExt && canStepStatusBack(task);
+        const canFwd = !isArchived && !isExt && canStepStatusForward(task);
+        const backDisabled = canBack ? "" : " disabled";
+        const fwdDisabled = canFwd ? "" : " disabled";
         const col7 = `<td class="td-status">
-            <button class="status-btn status-${task.status}" ${isArchived || isExt ? 'disabled' : ''} onclick="cycleStatus(${task.id})"${helpAttr(statusHelp)}${statusTitleAttr}>${task.status}</button>
+            <div class="status-stepper"${helpAttr(statusHelp)}>
+                <button type="button" class="status-step-btn"${backDisabled} onclick="stepStatus(${task.id}, -1)" aria-label="進捗を戻す" data-help="進捗◀：一つ前の進捗へ戻します">◀</button>
+                <span class="status-btn status-btn--label status-${task.status}"${statusTitleAttr}>${task.status}</span>
+                <button type="button" class="status-step-btn"${fwdDisabled} onclick="stepStatus(${task.id}, 1)" aria-label="進捗を進める" data-help="進捗▶：一つ先の進捗へ進めます">▶</button>
+            </div>
         </td>`;
 
         const restoreBtn = (isArchived && !isParent && !isExt)
@@ -3781,8 +3855,7 @@ function renderTimeline() {
                 const doneIsoSpark =
                     isTerminalTaskStatus(task.status) &&
                     String(task.progressUpdatedAt || "").trim() &&
-                    String(task.progressUpdatedAt).trim() <= task.deadline &&
-                    String(task.progressUpdatedAt).trim() >= (task.startDate || "")
+                    String(task.progressUpdatedAt).trim() <= (task.deadline || "\uffff")
                         ? String(task.progressUpdatedAt).trim()
                         : "";
                 if (doneIsoSpark && task.deadline && doneIsoSpark < task.deadline) {
@@ -3790,7 +3863,9 @@ function renderTimeline() {
                     const spark = document.createElement("div");
                     spark.className = "timeline-bar-sparkle";
                     spark.textContent = "✨";
-                    const sparkLeft = doneDayLeft - wrapLeft + dayWidth / 2;
+                    // 計画バー外（着手前完了など）でも見えるよう、バー左端〜右端にクランプ
+                    const sparkLeftRaw = doneDayLeft - wrapLeft + dayWidth / 2;
+                    const sparkLeft = Math.max(dayWidth / 2, Math.min(wrapWidth - dayWidth / 2, sparkLeftRaw));
                     spark.style.cssText = `position:absolute;left:${sparkLeft}px;top:-4px;transform:translateX(-50%);font-size:12px;line-height:1;z-index:12;pointer-events:none;text-shadow:0 0 3px #fff,0 0 2px #000;`;
                     spark.setAttribute("data-help", `期限内完了：完了日 ${doneIsoSpark}（右側は計画のみ表示）`);
                     bar.appendChild(spark);
@@ -4490,22 +4565,57 @@ function resetFamilyPeriods(parentId) {
     showToast("期間をリセットしました");
 }
 
-function cycleStatus(id) {
-    const task = tasks.find(t => t.id === id);
-    if (!task || isExternalTask(task)) return;
+function stepStatus(id, direction) {
+    const task = tasks.find((t) => t.id === id);
+    if (!task || isExternalTask(task) || task.archived) return;
+    const dir = direction < 0 ? -1 : 1;
+
     if (isParentTask(task)) {
-        if (task.status === "進行中") task.status = "修正中";
-        else if (task.status === "修正中") task.status = "進行中";
-        else task.status = "進行中";
-    } else {
-        const idx = statusList.indexOf(task.status);
-        task.status = statusList[(idx + 1) % statusList.length];
-        task.progressUpdatedAt = dateToIsoLocal(new Date());
-        applyParentStatusFromChildrenForFamily(getTaskFamilyKey(task));
-        maybeAdvanceActualForTask(task);
+        if (task.status === "中止" || task.status === "完了") return;
+        if (dir > 0) {
+            if (task.status === "修正中") return;
+            if (task.status === "進行中") task.status = "修正中";
+            else task.status = "進行中";
+        } else {
+            if (task.status !== "修正中") return;
+            task.status = "進行中";
+        }
+        save();
+        renderAll();
+        return;
     }
+
+    if (task.status === "中止") return;
+    const idx = statusList.indexOf(task.status);
+    if (idx < 0) return;
+    const nextIdx = idx + dir;
+    if (nextIdx < 0 || nextIdx >= statusList.length) return;
+    const nextStatus = statusList[nextIdx];
+
+    const fromComplete = task.status === "完了" && dir < 0;
+    const toNotStarted = nextStatus === "未着手" && dir < 0;
+    if (fromComplete || toNotStarted) {
+        if (!confirmActualRollback(task)) return;
+        clearPdcaActualData(task);
+    }
+
+    task.status = nextStatus;
+    task.progressUpdatedAt = dateToIsoLocal(new Date());
+    applyParentStatusFromChildrenForFamily(getTaskFamilyKey(task));
+
+    if (ACTUAL_UPDATE_STATUSES.has(nextStatus)) {
+        maybeAdvanceActualForTask(task);
+    } else if (nextStatus === "完了") {
+        finalizeActualOnComplete(task);
+    }
+
     save();
     renderAll();
+}
+
+/** @deprecated 後方互換。◀▶ の stepStatus を使う */
+function cycleStatus(id) {
+    stepStatus(id, 1);
 }
 
 function deleteTask(id) {
