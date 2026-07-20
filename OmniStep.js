@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.3.0 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.3.0";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.3.1 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.3.1";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -104,6 +104,13 @@ function applyParentStatusFromChildrenForFamily(familyKey) {
  * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
  */
 const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.3.1",
+        content:
+            "タイムラインに単体移動／全体移動トグルを追加。全体移動では親バーをドラッグしてテーマ全体の計画を平行移動（◇★・実績・依存フラグは維持）。実行中の子があるテーマは移動不可。操作手順書に B-16 を追記。",
+        releasedAt: "2026-07-20",
+        modifier: "—",
+    },
     {
         ver: "1.3.0",
         content:
@@ -1009,6 +1016,8 @@ function timelineDepBarEdgeClientX(barEl, edge) {
 
 /** タイムライン：実績だけ手で合わせるモード（デフォルトOFF・リストへ切替でOFF） */
 let pdcaActualEditMode = false;
+/** タイムライン：親ドラッグでテーマ全体の計画を平行移動（デフォルトOFF＝単体移動） */
+let familyProjectMoveMode = false;
 let timelineRenderRaf = null;
 
 function scheduleRenderTimeline() {
@@ -1030,8 +1039,59 @@ function syncPdcaActualEditButton() {
 
 function togglePdcaActualEditMode() {
     pdcaActualEditMode = !pdcaActualEditMode;
+    if (pdcaActualEditMode && familyProjectMoveMode) {
+        familyProjectMoveMode = false;
+        syncFamilyProjectMoveButton();
+    }
     syncPdcaActualEditButton();
     renderTimeline();
+}
+
+function syncFamilyProjectMoveButton() {
+    const b = document.getElementById("btnFamilyProjectMove");
+    if (!b) return;
+    b.classList.toggle("is-active", familyProjectMoveMode);
+    b.setAttribute("aria-pressed", familyProjectMoveMode ? "true" : "false");
+    b.textContent = familyProjectMoveMode ? "全体移動" : "単体移動";
+}
+
+function toggleFamilyProjectMoveMode() {
+    familyProjectMoveMode = !familyProjectMoveMode;
+    if (familyProjectMoveMode && pdcaActualEditMode) {
+        pdcaActualEditMode = false;
+        syncPdcaActualEditButton();
+    }
+    syncFamilyProjectMoveButton();
+    renderTimeline();
+}
+
+/** プロジェクト全体スライドをロックする子ステータス（未着手以外） */
+const PROJECT_SLIDE_LOCK_STATUSES = new Set(["調査中", "進行中", "修正中", "完了", "中止"]);
+
+function isChildLockingProjectSlide(task) {
+    return !!(task && PROJECT_SLIDE_LOCK_STATUSES.has(task.status));
+}
+
+function isFamilyLockedForProjectSlide(familyKey) {
+    if (!familyKey) return true;
+    return tasks.some(
+        (t) =>
+            !t.archived &&
+            !isExternalTask(t) &&
+            getTaskFamilyKey(t) === familyKey &&
+            !isParentTask(t) &&
+            isChildLockingProjectSlide(t)
+    );
+}
+
+function getFamilyChildrenForProjectSlide(familyKey) {
+    return tasks.filter(
+        (t) =>
+            !t.archived &&
+            !isExternalTask(t) &&
+            getTaskFamilyKey(t) === familyKey &&
+            !isParentTask(t)
+    );
 }
 
 function ensurePdcaActualSeedFromComputed(task, todayMidnight) {
@@ -1954,6 +2014,8 @@ window.onload = () => {
     if (rangeGroup) rangeGroup.style.display = 'none';
     const btnPdcaInit = document.getElementById('btnPdcaActualEdit');
     if (btnPdcaInit) btnPdcaInit.style.display = 'none';
+    const btnFamInit = document.getElementById('btnFamilyProjectMove');
+    if (btnFamInit) btnFamInit.style.display = 'none';
     const btnAdvInit = document.getElementById('btnAdvanceActualToday');
     if (btnAdvInit) btnAdvInit.style.display = 'none';
     ensureDependencyFieldsIfNeeded();
@@ -1978,7 +2040,9 @@ window.onload = () => {
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState !== "visible") return;
         pdcaActualEditMode = false;
+        familyProjectMoveMode = false;
         syncPdcaActualEditButton();
+        syncFamilyProjectMoveButton();
         const tv = document.getElementById("timelineView");
         if (tv && tv.style.display !== "none") renderTimeline();
     });
@@ -3147,15 +3211,19 @@ function switchView(viewName) {
     const btnT = document.getElementById('btnTimeline');
     const rangeGroup = document.querySelector('.timeline-range-group');
     const btnPdca = document.getElementById('btnPdcaActualEdit');
+    const btnFam = document.getElementById('btnFamilyProjectMove');
     const btnAdv = document.getElementById('btnAdvanceActualToday');
 
     if (viewName === 'list') {
         pdcaActualEditMode = false;
+        familyProjectMoveMode = false;
         syncPdcaActualEditButton();
+        syncFamilyProjectMoveButton();
         listEl.style.display = 'block';
         timeEl.style.display = 'none';
         if (rangeGroup) rangeGroup.style.display = 'none';
         if (btnPdca) btnPdca.style.display = 'none';
+        if (btnFam) btnFam.style.display = 'none';
         if (btnAdv) btnAdv.style.display = 'none';
         if (btnL) {
             btnL.classList.add('view-btn-active');
@@ -3170,6 +3238,7 @@ function switchView(viewName) {
         timeEl.style.display = 'block';
         if (rangeGroup) rangeGroup.style.display = 'inline-flex';
         if (btnPdca) btnPdca.style.display = 'inline-flex';
+        if (btnFam) btnFam.style.display = 'inline-flex';
         if (btnAdv) btnAdv.style.display = 'inline-flex';
         hideThemeOverflowTooltip();
         if (btnT) {
@@ -3642,7 +3711,8 @@ function renderTimeline() {
             const barBg =
                 accentTl ||
                 (isExt ? "#5c6bc0" : isParent ? "#4285f4" : "#4285f4");
-            const readOnlyBar = isExt || isParent;
+            // 親は通常ロック。全体移動モードのときだけ自データの親バーをドラッグ可能にする
+            const readOnlyBar = isExt || (isParent && !familyProjectMoveMode);
             const barBase = isExt ? "#5c6bc0" : barBg;
 
             const bar = document.createElement("div");
@@ -3876,15 +3946,29 @@ function renderTimeline() {
             if (!readOnlyBar) {
                 bar.onmousedown = (e) => {
                     if (e.target.closest(".timeline-resize-handle")) return;
+                    if (familyProjectMoveMode) {
+                        if (isParent) startFamilyProjectDrag(e, task, bar);
+                        return;
+                    }
                     if (!isParent && pdcaActualEditMode) {
                         if (e.target.closest(".timeline-bar-exec-hit")) {
                             startPdcaActualBarDrag(e, task, bar);
                         }
                         return;
                     }
-                    startDrag(e, task, bar);
+                    if (!isParent) startDrag(e, task, bar);
                 };
-                bar.style.cursor = !isParent && pdcaActualEditMode ? "default" : "move";
+                if (familyProjectMoveMode) {
+                    if (isParent) {
+                        bar.style.cursor = isFamilyLockedForProjectSlide(getTaskFamilyKey(task))
+                            ? "not-allowed"
+                            : "grab";
+                    } else {
+                        bar.style.cursor = "default";
+                    }
+                } else {
+                    bar.style.cursor = !isParent && pdcaActualEditMode ? "default" : isParent ? "default" : "move";
+                }
             } else {
                 bar.style.cursor = "default";
             }
@@ -3904,16 +3988,21 @@ function renderTimeline() {
             } else if (isParent) {
                 bar.setAttribute(
                     "data-help",
-                    "タイムライン・親バー：子の期間を集約した表示（ドラッグでは動かしません）"
+                    familyProjectMoveMode
+                        ? "タイムライン・親バー（全体移動）：ドラッグでテーマ全体の計画を平行移動します。実行中の子があるテーマは移動できません。◇★・実績・依存フラグは維持します"
+                        : "タイムライン・親バー：子の期間を集約した表示（単体移動時はドラッグできません。全体移動トグルでテーマごと移動できます）"
                 );
             } else {
                 bar.setAttribute(
                     "data-help",
-                    "タイムライン・子バー：破線枠＝計画（着手〜納期の元幅）、下に重ねた実線＝実績。納期超過分は実績が薄赤。ドラッグ＝計画のみ移動（実績は独立）、実績修正ONで実績のみ移動／伸縮"
+                    familyProjectMoveMode
+                        ? "タイムライン・子バー（全体移動中）：個別ドラッグはできません。親バーを動かしてテーマ全体をずらします"
+                        : "タイムライン・子バー：破線枠＝計画（着手〜納期の元幅）、下に重ねた実線＝実績。納期超過分は実績が薄赤。ドラッグ＝計画のみ移動（実績は独立）、実績修正ONで実績のみ移動／伸縮"
                 );
             }
 
-            if (!readOnlyBar) {
+            // 全体移動中はリサイズハンドルを付けない（テーマ一括移動のみ）
+            if (!readOnlyBar && !familyProjectMoveMode) {
                 const resizeHandle = document.createElement("div");
                 resizeHandle.className = "timeline-resize-handle";
                 resizeHandle.style.position = "absolute";
@@ -4187,8 +4276,73 @@ function startPdcaActualResize(e, task, bar) {
     document.addEventListener("mouseup", onUp);
 }
 
+function startFamilyProjectDrag(e, parentTask, bar) {
+    if (!familyProjectMoveMode || !isParentTask(parentTask) || isExternalTask(parentTask)) return;
+    e.preventDefault();
+    const familyKey = getTaskFamilyKey(parentTask);
+    if (isFamilyLockedForProjectSlide(familyKey)) {
+        showToast("実行中のタスクがあるプロジェクトは動かせません。");
+        return;
+    }
+    const children = getFamilyChildrenForProjectSlide(familyKey);
+    if (!children.length) return;
+
+    const snapshots = children.map((c) => ({
+        task: c,
+        start: String(c.startDate || "").trim(),
+        deadline: String(c.deadline || "").trim(),
+    }));
+    const hasAnyDate = snapshots.some((s) => s.start || s.deadline);
+    if (!hasAnyDate) {
+        showToast("期間が未設定のテーマは動かせません。");
+        return;
+    }
+
+    isDraggingNow = true;
+    const startX = e.clientX;
+    const dayW = 15;
+
+    const applyDays = (daysMoved) => {
+        snapshots.forEach(({ task, start, deadline }) => {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(start)) {
+                task.startDate = addCalendarDaysIso(start, daysMoved);
+            }
+            if (/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+                task.deadline = addCalendarDaysIso(deadline, daysMoved);
+            }
+            // ◇/★・実績は動かさない。fFlag はそのまま（相対関係維持）
+            reflectTaskDatesInList(task);
+        });
+        syncParentDates(familyKey);
+    };
+
+    const onMouseMove = (moveEvent) => {
+        const daysMoved = Math.round((moveEvent.clientX - startX) / dayW);
+        applyDays(daysMoved);
+        save();
+        scheduleRenderTimeline();
+        showTimelineTooltip(parentTask, moveEvent);
+    };
+
+    const onMouseUp = (upEvent) => {
+        const daysMoved = Math.round((upEvent.clientX - startX) / dayW);
+        applyDays(daysMoved);
+        // 家族一括のため pushNextDependentTasks は不要（依存フラグと相対間隔を維持）
+        save();
+        isDraggingNow = false;
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+        renderAll();
+        hideTimelineTooltip();
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+}
+
 function startDrag(e, task, bar) {
     // 親タスク、または「完了」ステータスのタスクはドラッグさせない
+    if (familyProjectMoveMode) return;
     if (isParentTask(task) || isTerminalTaskStatus(task.status) || isExternalTask(task)) return;
 
     isDraggingNow = true;
@@ -4269,6 +4423,7 @@ function startDrag(e, task, bar) {
 }
 
 function startResize(e, task, bar) {
+    if (familyProjectMoveMode) return;
     if (isParentTask(task) || isTerminalTaskStatus(task.status) || isExternalTask(task)) return;
     const resizeTarget = e.currentTarget?.dataset?.resizeTarget || "plan";
     if (resizeTarget === "actual") {

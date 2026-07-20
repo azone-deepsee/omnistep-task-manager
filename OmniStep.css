@@ -292,7 +292,8 @@ tr.expired .bar,
     margin-bottom: 10px;
     flex-wrap: wrap;
 }
-.timeline-pdca-edit-btn.is-active {
+.timeline-pdca-edit-btn.is-active,
+.timeline-family-move-btn.is-active {
     background: #1565c0;
     color: #fff;
     border-color: #0d47a1;
@@ -552,6 +553,7 @@ tbody tr:hover,
 }
 
 .view-selector .timeline-pdca-edit-btn,
+.view-selector .timeline-family-move-btn,
 .view-selector .timeline-advance-actual-btn {
     margin-left: 10px;
     align-self: center;
@@ -2626,7 +2628,8 @@ html[data-theme="dark"] .timeline-bar-exec-over {
     background: rgba(183, 77, 77, 0.92) !important;
     border-color: rgba(239, 154, 154, 0.85) !important;
 }
-html[data-theme="dark"] .timeline-pdca-edit-btn.is-active {
+html[data-theme="dark"] .timeline-pdca-edit-btn.is-active,
+html[data-theme="dark"] .timeline-family-move-btn.is-active {
     background: #42a5f5;
     color: #0d1117;
     border-color: #90caf9;

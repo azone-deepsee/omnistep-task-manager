@@ -151,6 +151,9 @@
             <button type="button" id="btnPdcaActualEdit" class="btn-sub timeline-pdca-edit-btn" onclick="togglePdcaActualEditMode()"
                 style="display:none;" aria-pressed="false"
                 data-help="実績修正：ONのとき、子タスクの実績バーだけをドラッグで移動・右端で伸縮できます（計画の破線はそのまま）。リスト表示に戻すとOFFになります">実績修正</button>
+            <button type="button" id="btnFamilyProjectMove" class="btn-sub timeline-family-move-btn" onclick="toggleFamilyProjectMoveMode()"
+                style="display:none;" aria-pressed="false"
+                data-help="単体移動／全体移動：単体＝子バーを個別に計画移動。全体移動＝親バーをドラッグしてテーマ全体の計画を平行移動（◇★・実績は動かさない）。実行中の子があるテーマは移動不可。リスト表示に戻すと単体移動に戻ります">単体移動</button>
             <button type="button" id="btnAdvanceActualToday" class="btn-sub timeline-advance-actual-btn" onclick="onAdvanceActualToTodayClick()"
                 style="display:none;"
                 data-help="実績更新：調査中・進行中・修正中の子タスクの実績終了日を今日まで伸ばして保存します（納期超過分は実績が赤く表示されます）">実績更新</button>

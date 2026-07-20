@@ -160,6 +160,7 @@ strong{color:#1a237e;}
     <a class="toc-link toc-b" href="#b13">B-13 テーマ期間カレンダー</a>
     <a class="toc-link toc-b" href="#b14">B-14 実績更新ボタン</a>
     <a class="toc-link toc-b" href="#b15">B-15 版履歴（設定）</a>
+    <a class="toc-link toc-b" href="#b16">B-16 全体移動（プロジェクトスライド）</a>
   </div>
 </nav>
 
@@ -272,6 +273,7 @@ strong{color:#1a237e;}
     <li>表示範囲を <kbd>3か月</kbd>〜<kbd>12か月</kbd> で切り替え</li>
     <li>月ヘッダーの <kbd>＋</kbd>/<kbd>−</kbd> で月ごとに折りたたみ可能（月見出しは交互色で区切りが分かりやすい）</li>
     <li>子バーは<strong>破線枠＝計画</strong>、<strong>下段の実線＝実績</strong>（PDCA重ね表示）</li>
+    <li><kbd>単体移動</kbd>／<kbd>全体移動</kbd>トグルで、子の個別移動と親によるテーマ一括スライドを切り替え（→ B-16）</li>
     <li>バーの上にホバーするとツールチップが表示される</li>
   </ol>
   <div class="tip">赤い縦線が「今日」。日曜・休日マスターは薄い帯、土曜は点線で区別されます。親バーは子の集約表示で、直接ドラッグしません。</div>
@@ -723,8 +725,27 @@ strong{color:#1a237e;}
 </div>
 </div>
 
+<!-- B-16 -->
+<div class="section b-card" id="b16">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-16 全体移動（プロジェクトスライド） <span class="badge">タイムライン</span>
+</button>
+<div class="section-body">
+  <div class="when">テーマ（プロジェクト）の計画を、子の相対関係を保ったまま前後にずらしたいとき。</div>
+  <ol class="steps">
+    <li>タイムライン表示で <kbd>単体移動</kbd> トグルをクリック → <kbd>全体移動</kbd>（ハイライト）にする</li>
+    <li>親バーをドラッグすると、テーマ内の<strong>すべての子の計画（着手・納期）</strong>が同じ日数だけ平行移動する</li>
+    <li>親の期間は従来どおり子の集約で再計算される</li>
+    <li>リスト表示に戻すと自動で <kbd>単体移動</kbd> に戻る</li>
+  </ol>
+  <div class="tip">◇／★・実績・依存フラグ（fFlag）は動かしません。子同士の間隔と依存関係はそのまま維持されます。</div>
+  <div class="warn">子に調査中・進行中・修正中・完了・中止が1件でもあるテーマはスライドできません。親を動かそうとすると「実行中のタスクがあるプロジェクトは動かせません。」と表示されます。</div>
+  <div class="tip">全体移動中は子バーの個別ドラッグ／納期伸縮はできません。実績修正とは同時に使えません（片方をONにすると他方はOFF）。</div>
+</div>
+</div>
+
 <div class="manual-footer">
-  PBPM 操作手順書 ─ 更新日: 2026年7月 ─ 対応バージョン: v1.3.0
+  PBPM 操作手順書 ─ 更新日: 2026年7月 ─ 対応バージョン: v1.3.1
 </div>
 
 </main>
