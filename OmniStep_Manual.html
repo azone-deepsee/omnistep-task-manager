@@ -161,6 +161,7 @@ strong{color:#1a237e;}
     <a class="toc-link toc-b" href="#b14">B-14 実績更新ボタン</a>
     <a class="toc-link toc-b" href="#b15">B-15 版履歴（設定）</a>
     <a class="toc-link toc-b" href="#b16">B-16 全体移動（プロジェクトスライド）</a>
+    <a class="toc-link toc-b" href="#b17">B-17 戻る（一手Undo）</a>
   </div>
 </nav>
 
@@ -744,8 +745,24 @@ strong{color:#1a237e;}
 </div>
 </div>
 
+<!-- B-17 -->
+<div class="section b-card" id="b17">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-17 戻る（一手Undo） <span class="badge">安全装置</span>
+</button>
+<div class="section-body">
+  <div class="when">直前のタスク変更を取り消したいとき。</div>
+  <ol class="steps">
+    <li>リストまたはタイムラインの <kbd>戻る</kbd> をクリック（または Ctrl+Z / ⌘Z）</li>
+    <li>直前に保存されたタスク状態へ戻る</li>
+  </ol>
+  <div class="tip">タイムラインのドラッグは「ドラッグ開始前」が1手分です。途中の細かい移動はまとめて取り消せます。</div>
+  <div class="warn">戻れるのは<strong>1手だけ</strong>です。やり直し（Redo）はありません。ページを再読み込みすると履歴は消えます。年間マスターや設定の変更は対象外です。</div>
+</div>
+</div>
+
 <div class="manual-footer">
-  PBPM 操作手順書 ─ 更新日: 2026年7月 ─ 対応バージョン: v1.3.1
+  PBPM 操作手順書 ─ 更新日: 2026年7月 ─ 対応バージョン: v1.3.2
 </div>
 
 </main>

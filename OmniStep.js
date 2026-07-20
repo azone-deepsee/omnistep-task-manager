@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.3.1 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.3.1";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.3.2 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.3.2";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -104,6 +104,13 @@ function applyParentStatusFromChildrenForFamily(familyKey) {
  * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
  */
 const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.3.2",
+        content:
+            "「戻る」ボタン追加（直前のタスク変更を1手だけ取り消し、Ctrl+Z対応）。タイムラインドラッグは開始前を1手としてまとめて戻せる。操作手順書に B-17 を追記。",
+        releasedAt: "2026-07-20",
+        modifier: "—",
+    },
     {
         ver: "1.3.1",
         content:
@@ -1108,7 +1115,7 @@ function ensurePdcaActualSeedFromComputed(task, todayMidnight) {
         task.pdcaActualStart = todayIso;
         task.pdcaActualEnd = todayIso;
     }
-    save();
+    save({ skipUndo: true });
 }
 
 /** 実績更新の対象か（子・着手済みの実行中系・自データ） */
@@ -1210,7 +1217,7 @@ function advanceRunningTasksActualToToday(options = {}) {
         if (advanceTaskActualToToday(task, today0)) n++;
     });
     if (n > 0) {
-        save();
+        save({ skipUndo: silent });
         if (!silent) {
             showToast(`実績更新：${n} 件を今日（${dateToIsoLocal(today0)}）まで保存しました`);
         }
@@ -2018,6 +2025,18 @@ window.onload = () => {
     if (btnFamInit) btnFamInit.style.display = 'none';
     const btnAdvInit = document.getElementById('btnAdvanceActualToday');
     if (btnAdvInit) btnAdvInit.style.display = 'none';
+    const btnUndoTlInit = document.getElementById('btnUndoTimeline');
+    if (btnUndoTlInit) btnUndoTlInit.style.display = 'none';
+    syncUndoButton();
+    document.addEventListener("keydown", (e) => {
+        if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z" || e.shiftKey || e.altKey) return;
+        const t = e.target;
+        if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) {
+            return;
+        }
+        e.preventDefault();
+        undoLastChange();
+    });
     ensureDependencyFieldsIfNeeded();
     migrateYearlyMasterIfNeeded();
     migrateTaskFieldsIfNeeded();
@@ -3213,6 +3232,7 @@ function switchView(viewName) {
     const btnPdca = document.getElementById('btnPdcaActualEdit');
     const btnFam = document.getElementById('btnFamilyProjectMove');
     const btnAdv = document.getElementById('btnAdvanceActualToday');
+    const btnUndoTl = document.getElementById('btnUndoTimeline');
 
     if (viewName === 'list') {
         pdcaActualEditMode = false;
@@ -3225,6 +3245,7 @@ function switchView(viewName) {
         if (btnPdca) btnPdca.style.display = 'none';
         if (btnFam) btnFam.style.display = 'none';
         if (btnAdv) btnAdv.style.display = 'none';
+        if (btnUndoTl) btnUndoTl.style.display = 'none';
         if (btnL) {
             btnL.classList.add('view-btn-active');
             btnL.classList.remove('view-btn-inactive');
@@ -3240,6 +3261,7 @@ function switchView(viewName) {
         if (btnPdca) btnPdca.style.display = 'inline-flex';
         if (btnFam) btnFam.style.display = 'inline-flex';
         if (btnAdv) btnAdv.style.display = 'inline-flex';
+        if (btnUndoTl) btnUndoTl.style.display = 'inline-flex';
         hideThemeOverflowTooltip();
         if (btnT) {
             btnT.classList.add('view-btn-active');
@@ -4210,6 +4232,7 @@ function startPdcaActualBarDrag(e, task, bar) {
     if (isExternalTask(task) || isTerminalTaskStatus(task.status)) return;
     e.preventDefault();
     e.stopPropagation();
+    beginUndoGesture();
     isDraggingNow = true;
     const today0 = new Date();
     today0.setHours(0, 0, 0, 0);
@@ -4218,6 +4241,7 @@ function startPdcaActualBarDrag(e, task, bar) {
     const origE = getPdcaActualEndForDisplay(task, today0);
     if (!origS || !origE) {
         isDraggingNow = false;
+        endUndoGesture();
         return;
     }
     const startClientX = e.clientX;
@@ -4232,6 +4256,7 @@ function startPdcaActualBarDrag(e, task, bar) {
     };
     const onUp = () => {
         isDraggingNow = false;
+        endUndoGesture();
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         renderAll();
@@ -4245,6 +4270,7 @@ function startPdcaActualResize(e, task, bar) {
     if (isExternalTask(task) || isTerminalTaskStatus(task.status)) return;
     e.preventDefault();
     e.stopPropagation();
+    beginUndoGesture();
     isDraggingNow = true;
     const today0 = new Date();
     today0.setHours(0, 0, 0, 0);
@@ -4267,6 +4293,7 @@ function startPdcaActualResize(e, task, bar) {
     };
     const onUp = () => {
         isDraggingNow = false;
+        endUndoGesture();
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         renderAll();
@@ -4299,6 +4326,7 @@ function startFamilyProjectDrag(e, parentTask, bar) {
     }
 
     isDraggingNow = true;
+    beginUndoGesture();
     const startX = e.clientX;
     const dayW = 15;
 
@@ -4330,6 +4358,7 @@ function startFamilyProjectDrag(e, parentTask, bar) {
         // 家族一括のため pushNextDependentTasks は不要（依存フラグと相対間隔を維持）
         save();
         isDraggingNow = false;
+        endUndoGesture();
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
         renderAll();
@@ -4346,6 +4375,7 @@ function startDrag(e, task, bar) {
     if (isParentTask(task) || isTerminalTaskStatus(task.status) || isExternalTask(task)) return;
 
     isDraggingNow = true;
+    beginUndoGesture();
     const startX = e.clientX;
     const startBase = task.startDate || task.deadline || task.msDate;
     const endBase = task.deadline || task.startDate || task.msDate;
@@ -4411,6 +4441,7 @@ function startDrag(e, task, bar) {
             save();
         }
         isDraggingNow = false;
+        endUndoGesture();
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
         // 再描画（リスト側にも反映させるため renderAll を呼ぶのも有効です）
@@ -4431,6 +4462,7 @@ function startResize(e, task, bar) {
         return;
     }
     isDraggingNow = true;
+    beginUndoGesture();
     const startX = e.clientX;
     const startIso = (task.startDate || "").trim();
     const origDeadline = (task.deadline || "").trim();
@@ -4458,6 +4490,7 @@ function startResize(e, task, bar) {
 
     const onMouseUp = () => {
         isDraggingNow = false;
+        endUndoGesture();
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
         pushNextDependentTasks(task);
@@ -4494,9 +4527,88 @@ function syncParentDates(familyKey) {
 }
 
 // --- 保存・同期・マスタ ---
+/** 一手戻し用：直近の変更前 tasks JSON（メモリのみ・リロードで消える） */
+let undoTasksJson = null;
+/** ドラッグ等の連続 save 中は Undo スナップショットを上書きしない */
+let undoGestureLocked = false;
+
+function syncUndoButton() {
+    const can = undoTasksJson != null;
+    ["btnUndo", "btnUndoTimeline"].forEach((id) => {
+        const b = document.getElementById(id);
+        if (!b) return;
+        b.disabled = !can;
+        b.setAttribute("aria-disabled", can ? "false" : "true");
+    });
+}
+
+/** ドラッグ開始時など：いまの保存済み状態を「戻せる1手」として固定 */
+function beginUndoGesture() {
+    try {
+        undoTasksJson = localStorage.getItem("omniStepData");
+        if (undoTasksJson == null) undoTasksJson = JSON.stringify(tasks);
+    } catch {
+        undoTasksJson = JSON.stringify(tasks);
+    }
+    undoGestureLocked = true;
+    syncUndoButton();
+}
+
+function endUndoGesture() {
+    undoGestureLocked = false;
+}
+
+function undoLastChange() {
+    if (undoTasksJson == null) {
+        showToast("戻せる操作がありません");
+        return;
+    }
+    try {
+        const restored = JSON.parse(undoTasksJson);
+        if (!Array.isArray(restored)) throw new Error("invalid undo payload");
+        tasks = restored;
+        undoTasksJson = null;
+        undoGestureLocked = false;
+        save({ skipUndo: true });
+        syncUndoButton();
+        renderAll();
+        showToast("直前の操作を戻しました");
+    } catch {
+        undoTasksJson = null;
+        undoGestureLocked = false;
+        syncUndoButton();
+        showToast("戻しに失敗しました");
+    }
+}
+
 // 【共通】データをローカルストレージに保存する関数
-function save() {
-    localStorage.setItem('omniStepData', JSON.stringify(tasks));
+function save(options = {}) {
+    const skipUndo = !!options.skipUndo;
+    let next;
+    try {
+        next = JSON.stringify(tasks);
+    } catch {
+        return;
+    }
+    let prev = null;
+    try {
+        prev = localStorage.getItem("omniStepData");
+    } catch {
+        prev = null;
+    }
+    if (prev == null) prev = "[]";
+    if (prev !== next) {
+        if (!skipUndo && !undoGestureLocked) {
+            undoTasksJson = prev;
+        }
+        try {
+            localStorage.setItem("omniStepData", next);
+        } catch (e) {
+            showToast("保存に失敗しました（容量不足の可能性があります）");
+            return;
+        }
+        syncUndoButton();
+    }
 }
 
 // 【共通】タスクの値を書き換える唯一の窓口

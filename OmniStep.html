@@ -148,6 +148,9 @@
                 <button type="button" class="range-btn" data-months="9" onclick="setTimelineMonthRange(9)">9か月</button>
                 <button type="button" class="range-btn" data-months="12" onclick="setTimelineMonthRange(12)">12か月</button>
             </div>
+            <button type="button" id="btnUndoTimeline" class="btn-sub" onclick="undoLastChange()" disabled
+                style="display:none;" aria-disabled="true"
+                data-help="戻る：直前のタスク変更を1手だけ取り消します（Ctrl+Z）。ページ再読み込み後は消え、やり直し（Redo）はありません">戻る</button>
             <button type="button" id="btnPdcaActualEdit" class="btn-sub timeline-pdca-edit-btn" onclick="togglePdcaActualEditMode()"
                 style="display:none;" aria-pressed="false"
                 data-help="実績修正：ONのとき、子タスクの実績バーだけをドラッグで移動・右端で伸縮できます（計画の破線はそのまま）。リスト表示に戻すとOFFになります">実績修正</button>
@@ -169,6 +172,8 @@
                 <!--<button class="btn-sub btn-sort" onclick="sortTasks()">納期順ソート</button>-->
                 <button class="btn-add" type="button" onclick="openNewTaskModal()"
                     data-help="新規テーマ登録：親テーマと最初の子をまとめて登録するウィンドウを開きます">＋新規テーマ登録</button>
+                <button type="button" id="btnUndo" class="btn-sub" onclick="undoLastChange()" disabled aria-disabled="true"
+                    data-help="戻る：直前のタスク変更を1手だけ取り消します（Ctrl+Z）。ページ再読み込み後は消え、やり直し（Redo）はありません">戻る</button>
                 <button type="button" class="btn-sub" onclick="onAdvanceActualToTodayClick()"
                     data-help="実績更新：調査中・進行中・修正中の子タスクの実績終了日を今日まで伸ばして保存します（納期超過分は実績が赤く表示されます）">実績更新</button>
                 <div class="action-buttons">
