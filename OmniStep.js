@@ -3,8 +3,8 @@
  * テンプレート機能 / 動的タイトル / カテゴリ統一 / 4月始まり同期タイムライン
  */
 
-/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.3.2 などと揃えると追いやすいです） */
-const PBPM_APP_VERSION = "1.3.2";
+/** アプリ版（リリース時はここだけ上げる。Git のタグ v1.3.3 などと揃えると追いやすいです） */
+const PBPM_APP_VERSION = "1.3.3";
 
 let isInitialLoad = true;
 let lastToggledTheme = null; // ★追加：最後にクリックされた親タスク名を記憶
@@ -104,6 +104,13 @@ function applyParentStatusFromChildrenForFamily(familyKey) {
  * releasedAt: "YYYY-MM-DD" または ISO。modifier: 担当者名（不明時は "—"）
  */
 const PBPM_VERSION_HISTORY = [
+    {
+        ver: "1.3.3",
+        content:
+            "親テーマに「フォルダパス」を追加（メモから設定、操作列🔗でパスをコピー）。CSVの「フォルダパス」列に出力／取込対応。操作手順書に B-18 を追記。ブラウザのみ・追加ソフト不要の方針を維持。",
+        releasedAt: "2026-08-23",
+        modifier: "—",
+    },
     {
         ver: "1.3.2",
         content:
@@ -3188,9 +3195,14 @@ function renderAll() {
         const cancelBtnHtml = (!isExt && !isArchived && !isTerminalTaskStatus(task.status))
             ? `<span class="memo-action-icon memo-cancel-icon" onclick="cancelTask(${task.id})" style="cursor:pointer; color:#c62828;"${helpAttr("中止：このタスクを中止します（完了と同様に履歴へ移動できます）")}>⛔</span>`
             : `<span class="memo-action-icon memo-cancel-spacer" aria-hidden="true"></span>`;
+        const folderPathStr = isParent ? normalizeFolderPath(task.folderPath) : "";
+        const folderLinkHtml = folderPathStr
+            ? `<span class="memo-action-icon" onclick="openTaskFolderLink(${task.id}, event)" style="cursor:pointer; color:#1565c0;"${helpAttr("フォルダリンク：パスをコピーします（エクスプローラーのアドレス欄に貼り付け）")}>🔗</span>`
+            : "";
         const col8 = `<td class="td-action-col">
             <div class="memo-action-cell">
                 <span class="memo-action-icon" onclick="openMemo(${task.id})" style="cursor:pointer; color:${(task.memo?.trim()) ? "#999" : "#1a73e8"};"${helpAttr('メモ：詳細メモの入力・編集ウィンドウを開きます')}>${(task.memo?.trim()) ? "📝" : "🖋"}</span>
+                ${folderLinkHtml}
                 ${cancelBtnHtml}
                 ${isExt ? `<span class="memo-action-icon" style="opacity:0.35; pointer-events:none;"${helpAttr('削除：外部CSV行はここから削除できません')}>🗑</span>` : (isArchived ? restoreBtn : `<span class="memo-action-icon" onclick="deleteTask(${task.id})" style="cursor:pointer; color:#999;"${helpAttr('削除：このタスクを削除します（親ならテーマごと）')}>🗑</span>`)}
             </div>
@@ -5203,6 +5215,57 @@ function handleDeleteLogic() {
     showToast(`${count}件を削除しました`);
 }
 
+function normalizeFolderPath(path) {
+    return String(path || "").trim();
+}
+
+function copyTextToClipboard(text) {
+    const s = String(text || "");
+    if (!s) return Promise.resolve(false);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(s).then(() => true).catch(() => false);
+    }
+    try {
+        const ta = document.createElement("textarea");
+        ta.value = s;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        return Promise.resolve(!!ok);
+    } catch {
+        return Promise.resolve(false);
+    }
+}
+
+/** 親テーマのフォルダパスをクリップボードへコピー（ブラウザのみ・環境構築不要） */
+function openTaskFolderLink(taskId, ev) {
+    if (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+    }
+    const task = findTaskByIdAny(taskId);
+    if (!task || !isParentTask(task)) {
+        showToast("親テーマのフォルダリンクのみ利用できます");
+        return;
+    }
+    const path = normalizeFolderPath(task.folderPath);
+    if (!path) {
+        showToast("フォルダパスがありません");
+        return;
+    }
+    copyTextToClipboard(path).then((ok) => {
+        if (ok) {
+            showToast("パスをコピーしました（エクスプローラーのアドレス欄に貼り付け）");
+        } else {
+            showToast(`コピーできませんでした。手動で開いてください: ${path}`);
+        }
+    });
+}
+
 // 新しい状態
 function closeMemo() {
     const modal = document.getElementById('memoModal');
@@ -5213,6 +5276,13 @@ function closeMemo() {
     if (saveBtn) saveBtn.style.display = "";
     const ta = document.getElementById('memoText');
     if (ta) ta.readOnly = false;
+    const pathWrap = document.getElementById("memoFolderPathWrap");
+    const pathIn = document.getElementById("memoFolderPath");
+    if (pathWrap) pathWrap.style.display = "none";
+    if (pathIn) {
+        pathIn.value = "";
+        pathIn.readOnly = false;
+    }
     updateBodyScrollLock();
 }
 
@@ -5222,19 +5292,40 @@ function openMemo(taskId) {
     const task = findTaskByIdAny(taskId);
     const ta = document.getElementById('memoText');
     const saveBtn = document.querySelector('#memoModal .btn-add');
+    const pathWrap = document.getElementById("memoFolderPathWrap");
+    const pathIn = document.getElementById("memoFolderPath");
+    const isExt = isExternalTask(task);
+    const isParent = !!(task && isParentTask(task));
     if (ta) {
         ta.value = task?.memo || "";
-        ta.readOnly = isExternalTask(task);
+        ta.readOnly = isExt;
     }
-    if (saveBtn) saveBtn.style.display = isExternalTask(task) ? "none" : "";
+    if (pathWrap && pathIn) {
+        if (isParent) {
+            pathWrap.style.display = "block";
+            pathIn.value = normalizeFolderPath(task.folderPath);
+            pathIn.readOnly = isExt;
+        } else {
+            pathWrap.style.display = "none";
+            pathIn.value = "";
+            pathIn.readOnly = false;
+        }
+    }
+    if (saveBtn) saveBtn.style.display = isExt ? "none" : "";
     document.getElementById('memoModal').style.display = 'flex'; // 中央に表示
     updateBodyScrollLock();
 }
 function saveMemo() {
     const text = document.getElementById('memoText').value;
+    const pathIn = document.getElementById("memoFolderPath");
     const task = findTaskByIdAny(editingMemoId);
     if (task && !isExternalTask(task)) {
         task.memo = text;
+        if (isParentTask(task)) {
+            const fp = normalizeFolderPath(pathIn?.value);
+            if (fp) task.folderPath = fp;
+            else delete task.folderPath;
+        }
         save();
         renderAll();
         closeMemo();
@@ -5477,7 +5568,7 @@ function exportCSV() {
 
     // BOMを付与してExcelの文字化けを防止
     // TargetFlag=イベント名 / TargetDate=イベント日
-    let csv = "\uFEFFOwnerID,タスクID,カテゴリ,PrimaryStep,FirstFlag,展開日,TargetFlag,TargetDate,SecondaryStep,着手日,納期,進捗,メモ,アーカイブ済,fFlag,テーマ色,進捗更新日,実績着手,実績納期\n";
+    let csv = "\uFEFFOwnerID,タスクID,カテゴリ,PrimaryStep,FirstFlag,展開日,TargetFlag,TargetDate,SecondaryStep,着手日,納期,進捗,メモ,アーカイブ済,fFlag,テーマ色,進捗更新日,実績着手,実績納期,フォルダパス\n";
 
     exportTargets.forEach(t => {
         const isPar = isParentTask(t);
@@ -5485,6 +5576,7 @@ function exportCSV() {
         const progAt = !isPar && t.progressUpdatedAt ? t.progressUpdatedAt : "";
         const pStart = !isPar && t.pdcaActualStart ? String(t.pdcaActualStart).trim() : "";
         const pEnd = !isPar && t.pdcaActualEnd ? String(t.pdcaActualEnd).trim() : "";
+        const folderPath = isPar ? normalizeFolderPath(t.folderPath) : "";
         // カンマや改行が含まれても壊れないように各項目をダブルクォートで囲む
         const row = [
             ownerId,
@@ -5505,7 +5597,8 @@ function exportCSV() {
             themeCol,
             progAt,
             pStart,
-            pEnd
+            pEnd,
+            folderPath.replace(/"/g, '""')
         ].map(v => `"${v}"`).join(",");
 
         csv += row + "\n";
@@ -5720,6 +5813,7 @@ function importCSV(event) {
                 const progressUpdatedAt = pick(row, "進捗更新日", "progressUpdatedAt") || "";
                 const pdcaActualStart = pick(row, "実績着手", "pdcaActualStart") || "";
                 const pdcaActualEnd = pick(row, "実績納期", "pdcaActualEnd") || "";
+                const folderPath = pick(row, "フォルダパス", "folderPath") || "";
 
                 rawRows.push({
                     __lineNo: i,
@@ -5740,7 +5834,8 @@ function importCSV(event) {
                     themeAccent,
                     progressUpdatedAt,
                     pdcaActualStart,
-                    pdcaActualEnd
+                    pdcaActualEnd,
+                    folderPath
                 });
             }
 
@@ -5761,6 +5856,7 @@ function importCSV(event) {
                         const pu = String(r.progressUpdatedAt || "").trim();
                         const pas = String(r.pdcaActualStart || "").trim();
                         const pae = String(r.pdcaActualEnd || "").trim();
+                        const fp = isPar ? normalizeFolderPath(r.folderPath) : "";
                         const rowObj = {
                             id: ts + r.__lineNo,
                             taskCode: r.taskCode,
@@ -5782,6 +5878,7 @@ function importCSV(event) {
                             fFlag: r.fFlag
                         };
                         if (isPar && ta) rowObj.themeAccentColor = ta;
+                        if (isPar && fp) rowObj.folderPath = fp;
                         if (!isPar && pu) rowObj.progressUpdatedAt = pu;
                         if (!isPar && /^\d{4}-\d{2}-\d{2}$/.test(pas)) rowObj.pdcaActualStart = pas;
                         if (!isPar && /^\d{4}-\d{2}-\d{2}$/.test(pae)) rowObj.pdcaActualEnd = pae;
@@ -5794,6 +5891,7 @@ function importCSV(event) {
                 const parentCode = nextParentCode();
 
                 const parentTa = normalizeThemeAccentHex(parentRow.themeAccent);
+                const parentFp = normalizeFolderPath(parentRow.folderPath);
                 imported.push({
                     id: ts + parentRow.__lineNo,
                     taskCode: parentCode,
@@ -5813,7 +5911,8 @@ function importCSV(event) {
                     memo: parentRow.memo || "",
                     archived: parentRow.archived,
                     fFlag: false,
-                    ...(parentTa ? { themeAccentColor: parentTa } : {})
+                    ...(parentTa ? { themeAccentColor: parentTa } : {}),
+                    ...(parentFp ? { folderPath: parentFp } : {})
                 });
 
                 const childRows = rows

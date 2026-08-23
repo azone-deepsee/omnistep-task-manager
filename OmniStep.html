@@ -267,7 +267,7 @@
                             </th>
                             <th style="width: 80px;" class="th-date-col" data-help="列・納期：納期（クリックで変更）">納期</th>
                             <th style="width: 118px;" data-help="列・進捗：◀▶で前後に切り替え（未着手へ戻す／完了から戻すときは実績差し戻し確認）">進捗</th>
-                            <th style="width: 76px;" data-help="列・操作：メモ・中止・削除・復元">操作</th>
+                            <th style="width: 100px;" data-help="列・操作：メモ・フォルダリンク・中止・削除・復元">操作</th>
                         </tr>
                     </thead>
                     <tbody id="taskBody"></tbody>
@@ -290,6 +290,13 @@
                 <h3 style="margin-top:0;">📝 メモ入力</h3>
                 <textarea id="memoText" placeholder="業務の詳細や備忘録を入力してください..."
                     data-help="メモ本文：選択したタスクに紐づく長めのメモを保存します"></textarea>
+                <div id="memoFolderPathWrap" class="memo-folder-path-wrap" style="display:none;">
+                    <label for="memoFolderPath" class="memo-folder-path-label"
+                        data-help="フォルダパス：親テーマの資料フォルダ（例 Z:\案件\○○）。一覧の🔗でパスをコピーできます">フォルダパス（親テーマ）</label>
+                    <input type="text" id="memoFolderPath" class="memo-folder-path-input"
+                        placeholder="例: Z:\案件\○○プロジェクト"
+                        data-help="フォルダパス：割当ドライブのフルパスを入力（UNCも可）。CSVの「フォルダパス」列にも出力されます">
+                </div>
                 <div class="modal-buttons" style="text-align:right; margin-top: auto;">
                     <button type="button" class="btn-sub" onclick="closeMemo()"
                         data-help="閉じる：メモウィンドウを閉じます（未保存のときは保存ボタンで確定）">閉じる</button>

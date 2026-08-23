@@ -1501,6 +1501,32 @@ tr.timeline-overdue-family-bottom > td,
     resize: none; /* 勝手に伸びないように固定 */
 }
 
+.memo-folder-path-wrap {
+    margin: 0 0 12px;
+}
+
+.memo-folder-path-label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--app-text-muted);
+    margin-bottom: 4px;
+}
+
+.memo-folder-path-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid var(--app-border-strong);
+    border-radius: 4px;
+    background: var(--app-input-bg);
+    color: var(--app-text);
+    font-size: 0.85rem;
+}
+
+.memo-folder-path-input:read-only {
+    opacity: 0.75;
+}
+
 /* タイムライン上の目標日（☆）のスタイル */
 .timeline-target-mark {
     position: absolute;

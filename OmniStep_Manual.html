@@ -162,6 +162,7 @@ strong{color:#1a237e;}
     <a class="toc-link toc-b" href="#b15">B-15 版履歴（設定）</a>
     <a class="toc-link toc-b" href="#b16">B-16 全体移動（プロジェクトスライド）</a>
     <a class="toc-link toc-b" href="#b17">B-17 戻る（一手Undo）</a>
+    <a class="toc-link toc-b" href="#b18">B-18 フォルダリンク（親テーマ）</a>
   </div>
 </nav>
 
@@ -761,8 +762,26 @@ strong{color:#1a237e;}
 </div>
 </div>
 
+<!-- B-18 -->
+<div class="section b-card" id="b18">
+<button class="section-toggle" onclick="toggleSection(this)">
+  <span class="chevron">▶</span> B-18 フォルダリンク（親テーマ） <span class="badge">チーム連携</span>
+</button>
+<div class="section-body">
+  <div class="when">テーマの資料フォルダ（割当ドライブ等）をメモから紐づけ、一覧やCSVで共有したいとき。</div>
+  <ol class="steps">
+    <li>親テーマの操作列でメモ（🖋／📝）を開く</li>
+    <li>「フォルダパス（親テーマ）」に例：<code>Z:\案件\○○プロジェクト</code> を入力して保存</li>
+    <li>操作列に <kbd>🔗</kbd> が表示される → クリックで<strong>パスをコピー</strong></li>
+    <li>エクスプローラーのアドレス欄に貼り付けてフォルダを開く</li>
+  </ol>
+  <div class="tip">ブラウザだけでは任意フォルダを直接開けないため、パスコピー方式です（PCへの追加ソフト不要）。パスはメモ本文とは別項目で、CSVの「フォルダパス」列にも出力／取込されます。子タスクには付きません。</div>
+  <div class="warn">上司・メンバ双方で同じ割当ドライブ（例 <code>Z:\</code>）が見えている必要があります。</div>
+</div>
+</div>
+
 <div class="manual-footer">
-  PBPM 操作手順書 ─ 更新日: 2026年7月 ─ 対応バージョン: v1.3.2
+  PBPM 操作手順書 ─ 更新日: 2026年8月 ─ 対応バージョン: v1.3.3
 </div>
 
 </main>
